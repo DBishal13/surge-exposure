@@ -49,6 +49,19 @@ uvicorn surge_exposure.api.main:app --reload
 python -m surge_exposure.pipeline
 ```
 
+## Run with Docker
+```bash
+docker compose up --build
+# then, once, fetch the storm-surge raster into the persisted volume:
+docker compose exec app python -m surge_exposure.data.storm_surge
+
+# visit http://127.0.0.1:8000/exposure?bbox=... or /map?bbox=...
+```
+The storm-surge raster is fetched lazily into a named volume (`surge-data`)
+rather than baked into the image, so it survives container rebuilds and
+doesn't bloat the image. Requires Docker Desktop (or another Docker
+engine) installed locally.
+
 ## Architecture
 - `data/overture.py` — Overture Maps building footprints, queried live via
   DuckDB spatial + httpfs directly against S3 GeoParquet (release resolved
@@ -78,4 +91,7 @@ they run fast and offline.
   against observed losses instead of the current fixed 60/40 split.
 - Persist scored results to PostGIS instead of (or alongside) DuckDB for
   multi-user access.
-- Deploy (AWS ECS/Lambda or Render) behind the demo URL.
+- Cache/precompute scores per bbox — each live request currently takes
+  ~35-40s, dominated by DuckDB scanning Overture parquet file footers over
+  the network.
+- Deploy the Docker image to a live demo URL (Render/AWS).
