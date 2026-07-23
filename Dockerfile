@@ -3,7 +3,12 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # rasterio/geopandas/duckdb ship self-contained manylinux wheels (bundled
-# GDAL/GEOS/PROJ), so no system GDAL packages are needed here.
+# GDAL/GEOS/PROJ), so no system GDAL packages are needed — but rasterio's
+# Linux wheel still dynamically links against system libexpat, which
+# python:3.11-slim doesn't include by default.
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml ./
 COPY src/ ./src/
 
