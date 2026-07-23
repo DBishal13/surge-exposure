@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 
+from surge_exposure.api import cache
 from surge_exposure.api.mapping import build_exposure_map
 from surge_exposure.config import DEFAULT_DEMO_BBOX
 from surge_exposure.pipeline import run_exposure_pipeline
@@ -43,6 +44,17 @@ def _parse_bbox(bbox: str | None) -> tuple[float, float, float, float]:
     except ValueError as e:
         raise HTTPException(400, "bbox values must be numeric") from e
     return (min_lon, min_lat, max_lon, max_lat)
+
+
+def _scored(bbox: tuple[float, float, float, float], limit: int | None):
+    """run_exposure_pipeline, cached to disk by (bbox, limit) -- see
+    api/cache.py. Shared by /exposure and /map so both benefit."""
+    cached = cache.get(bbox, limit)
+    if cached is not None:
+        return cached
+    gdf = run_exposure_pipeline(bbox, building_limit=limit)
+    cache.set(bbox, limit, gdf)
+    return gdf
 
 
 @app.get("/", include_in_schema=False)
@@ -91,7 +103,7 @@ def exposure(
     limit: int | None = Query(500, description="max buildings to score"),
 ) -> JSONResponse:
     parsed_bbox = _parse_bbox(bbox)
-    gdf = run_exposure_pipeline(parsed_bbox, building_limit=limit)
+    gdf = _scored(parsed_bbox, limit)
     if gdf.empty:
         return JSONResponse({"type": "FeatureCollection", "features": []})
     return JSONResponse(json.loads(gdf.to_json()))
@@ -103,6 +115,6 @@ def map_view(
     limit: int | None = Query(300, description="max buildings to score"),
 ) -> str:
     parsed_bbox = _parse_bbox(bbox)
-    gdf = run_exposure_pipeline(parsed_bbox, building_limit=limit)
+    gdf = _scored(parsed_bbox, limit)
     fmap = build_exposure_map(gdf)
     return fmap.get_root().render()

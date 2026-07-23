@@ -259,6 +259,13 @@ L.tileLayer(
 
 let currentLayer = null;
 
+// Bumped on every new request; a request only touches the DOM if it's
+// still the latest one by the time it resolves. This is what stops an
+// overlapping request (e.g. Enter pressed mid-load) from having its
+// stale result/overlay-message clobber a newer one that finished first.
+let requestSeq = 0;
+const FETCH_TIMEOUT_MS = 60000;
+
 const overlay = document.getElementById('overlay');
 const overlayText = document.getElementById('overlay-text');
 const searchBtn = document.getElementById('search-btn');
@@ -273,7 +280,26 @@ function hideOverlay() {
 }
 function setBusy(busy) {
   searchBtn.disabled = busy;
+  searchInput.disabled = busy;
   document.querySelectorAll('.preset-btn').forEach((b) => (b.disabled = busy));
+}
+
+async function fetchJSON(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `API error (${res.status})`);
+    }
+    return await res.json();
+  } catch (err) {
+    if (err.name === 'AbortError') throw new Error('Request timed out — try again.');
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function loadPresets() {
@@ -293,38 +319,38 @@ async function loadPresets() {
 }
 
 async function handleSearch() {
+  if (searchBtn.disabled) return; // already busy -- ignore double-submit (e.g. repeated Enter)
   const q = searchInput.value.trim();
   if (!q) return;
+  const seq = ++requestSeq;
   setBusy(true);
   showOverlay(`Looking up "${q}"&hellip;`);
   try {
-    const res = await fetch(`/geocode?q=${encodeURIComponent(q)}`);
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}));
-      throw new Error(body.detail || 'Location not found');
-    }
-    const loc = await res.json();
-    await runQuery(loc.bbox, loc.display_name);
+    const loc = await fetchJSON(`/geocode?q=${encodeURIComponent(q)}`);
+    if (seq !== requestSeq) return; // superseded while geocoding
+    await runQuery(loc.bbox, loc.display_name, seq);
   } catch (err) {
+    if (seq !== requestSeq) return;
     showOverlay(err.message || 'Something went wrong', true);
     setBusy(false);
   }
 }
 
-async function runQuery(bbox, label) {
+async function runQuery(bbox, label, seq) {
+  seq = seq ?? ++requestSeq;
   setBusy(true);
   showOverlay(`Scoring buildings near ${label}&hellip;<br><span style="font-size:12px">First look at a new area can take ~30-40s (live query against Overture Maps).</span>`);
   try {
     const bboxStr = bbox.join(',');
-    const res = await fetch(`/exposure?bbox=${bboxStr}&limit=500`);
-    if (!res.ok) throw new Error(`API error (${res.status})`);
-    const geojson = await res.json();
+    const geojson = await fetchJSON(`/exposure?bbox=${bboxStr}&limit=500`);
+    if (seq !== requestSeq) return; // a newer request superseded this one -- drop the stale result
     renderGeoJSON(geojson);
     hideOverlay();
   } catch (err) {
+    if (seq !== requestSeq) return;
     showOverlay(err.message || 'Something went wrong', true);
   } finally {
-    setBusy(false);
+    if (seq === requestSeq) setBusy(false);
   }
 }
 
