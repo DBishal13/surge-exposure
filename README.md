@@ -86,12 +86,21 @@ Unit tests validate the scoring/categorization logic and raster-sampling
 against synthetic data — they don't hit live NOAA/Overture services, so
 they run fast and offline.
 
+## Live demo
+A static, precomputed showcase (8 coastal regions, no live backend) is
+published via GitHub Pages: https://dbishal13.github.io/surge-exposure/
+See `scripts/precompute_regions.py` and `docs/`.
+
+## Caching
+`/exposure` and `/map` cache scored results to disk
+(`data/cache/exposure/`, keyed by bbox + limit, 6h TTL) so a cold request
+is still ~35-40s (dominated by the live Overture GeoParquet scan) but a
+repeat request for the same area is ~60ms. See `api/cache.py`.
+
 ## Next steps
 - Enrich with FEMA NFIP claims history to recalibrate the exposure weights
   against observed losses instead of the current fixed 60/40 split.
 - Persist scored results to PostGIS instead of (or alongside) DuckDB for
   multi-user access.
-- Cache/precompute scores per bbox — each live request currently takes
-  ~35-40s, dominated by DuckDB scanning Overture parquet file footers over
-  the network.
-- Deploy the Docker image to a live demo URL (Render/AWS).
+- Deploy the live Docker image (not just the static showcase) to a
+  publicly reachable demo URL (Render/AWS).
