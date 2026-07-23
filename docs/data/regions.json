@@ -1,0 +1,179 @@
+[
+  {
+    "slug": "south-beach-miami",
+    "label": "South Beach, Miami, FL",
+    "bbox": [
+      -80.14,
+      25.765,
+      -80.125,
+      25.8
+    ],
+    "surge_png": "south-beach-miami-surge.png",
+    "surge_bounds": [
+      -80.14,
+      25.764999999999997,
+      -80.125,
+      25.799999999999997
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "none": 633,
+      "low": 367
+    }
+  },
+  {
+    "slug": "clearwater-beach",
+    "label": "Clearwater Beach, FL",
+    "bbox": [
+      -82.835,
+      27.965,
+      -82.815,
+      27.985
+    ],
+    "surge_png": "clearwater-beach-surge.png",
+    "surge_bounds": [
+      -82.835,
+      27.964999999999996,
+      -82.815,
+      27.984999999999996
+    ],
+    "building_count": 717,
+    "category_counts": {
+      "low": 678,
+      "none": 38,
+      "moderate": 1
+    }
+  },
+  {
+    "slug": "fort-myers-beach",
+    "label": "Fort Myers Beach, FL",
+    "bbox": [
+      -81.965,
+      26.435,
+      -81.93,
+      26.47
+    ],
+    "surge_png": "fort-myers-beach-surge.png",
+    "surge_bounds": [
+      -81.965,
+      26.434999999999995,
+      -81.93,
+      26.469999999999995
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "low": 876,
+      "moderate": 103,
+      "none": 21
+    }
+  },
+  {
+    "slug": "french-quarter-nola",
+    "label": "French Quarter, New Orleans, LA",
+    "bbox": [
+      -90.075,
+      29.955,
+      -90.055,
+      29.97
+    ],
+    "surge_png": "french-quarter-nola-surge.png",
+    "surge_bounds": [
+      -90.075,
+      29.954999999999995,
+      -90.055,
+      29.969999999999995
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "none": 1000
+    }
+  },
+  {
+    "slug": "galveston-seawall",
+    "label": "Galveston Seawall, TX",
+    "bbox": [
+      -94.82,
+      29.28,
+      -94.78,
+      29.3
+    ],
+    "surge_png": "galveston-seawall-surge.png",
+    "surge_bounds": [
+      -94.82,
+      29.279999999999998,
+      -94.78,
+      29.299999999999997
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "none": 755,
+      "low": 245
+    }
+  },
+  {
+    "slug": "charleston-battery",
+    "label": "Charleston Battery, SC",
+    "bbox": [
+      -79.945,
+      32.76,
+      -79.92,
+      32.79
+    ],
+    "surge_png": "charleston-battery-surge.png",
+    "surge_bounds": [
+      -79.945,
+      32.75999999999999,
+      -79.92000000000002,
+      32.79
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "low": 891,
+      "none": 109
+    }
+  },
+  {
+    "slug": "outer-banks-nags-head",
+    "label": "Nags Head, Outer Banks, NC",
+    "bbox": [
+      -75.665,
+      35.93,
+      -75.61,
+      35.98
+    ],
+    "surge_png": "outer-banks-nags-head-surge.png",
+    "surge_bounds": [
+      -75.665,
+      35.92999999999999,
+      -75.61,
+      35.98
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "none": 839,
+      "low": 161
+    }
+  },
+  {
+    "slug": "ocean-city-md",
+    "label": "Ocean City, MD",
+    "bbox": [
+      -75.1,
+      38.32,
+      -75.075,
+      38.36
+    ],
+    "surge_png": "ocean-city-md-surge.png",
+    "surge_bounds": [
+      -75.1,
+      38.31999999999999,
+      -75.075,
+      38.36
+    ],
+    "building_count": 1000,
+    "category_counts": {
+      "low": 932,
+      "none": 68
+    }
+  }
+]
