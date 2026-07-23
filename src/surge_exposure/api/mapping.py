@@ -3,12 +3,16 @@ from __future__ import annotations
 import folium
 import geopandas as gpd
 
+# Status palette (severity reads as good -> critical, so it wears status
+# tokens rather than an arbitrary categorical/sequential ramp). "none" isn't
+# part of that spectrum -- it's the absence of a signal, so it gets neutral
+# gray instead of a status color (which would otherwise misread as "good").
 CATEGORY_COLORS = {
-    "severe": "#8b0000",
-    "high": "#e34a33",
-    "moderate": "#fdbb84",
-    "low": "#fee8c8",
-    "none": "#2c7fb8",
+    "severe": "#d03b3b",  # status: critical
+    "high": "#ec835a",  # status: serious
+    "moderate": "#fab219",  # status: warning
+    "low": "#0ca30c",  # status: good
+    "none": "#898781",  # neutral (muted ink) -- no signal, not "good"
 }
 
 

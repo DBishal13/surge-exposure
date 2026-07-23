@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SurgeExposure</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:      #fcfcfb;
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #e1e0d9;
+    --border:         rgba(11,11,11,0.10);
+    --status-good:     #0ca30c;
+    --status-warning:  #fab219;
+    --status-serious:  #ec835a;
+    --status-critical: #d03b3b;
+    --status-none:     #898781;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --surface-1:      #1a1a19;
+      --page-plane:     #0d0d0d;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --gridline:       #2c2c2a;
+      --border:         rgba(255,255,255,0.10);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: var(--page-plane);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--gridline);
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 18px; margin: 0 0 2px; }
+  header p { font-size: 13px; color: var(--text-secondary); margin: 0; }
+
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--gridline);
+    flex-shrink: 0;
+  }
+  .controls input[type="text"] {
+    flex: 1 1 240px;
+    min-width: 160px;
+    padding: 8px 10px;
+    font-size: 14px;
+    border: 1px solid var(--gridline);
+    border-radius: 6px;
+    background: var(--surface-1);
+    color: var(--text-primary);
+  }
+  button {
+    font: inherit;
+    font-size: 13px;
+    border: 1px solid var(--gridline);
+    background: var(--surface-1);
+    color: var(--text-primary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--text-muted); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button.primary {
+    background: #2a78d6;
+    border-color: #2a78d6;
+    color: #fff;
+  }
+  .chip {
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    color: var(--text-secondary);
+  }
+
+  .stats {
+    display: flex;
+    gap: 1px;
+    background: var(--gridline);
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+  .tile {
+    flex: 1 1 0;
+    min-width: 90px;
+    background: var(--surface-1);
+    padding: 10px 14px;
+    text-align: left;
+  }
+  .tile .value {
+    font-size: 22px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .tile .label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+  }
+  .swatch {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    display: inline-block;
+  }
+
+  main { position: relative; flex: 1 1 auto; min-height: 0; }
+  #map { position: absolute; inset: 0; }
+
+  .legend {
+    position: absolute;
+    bottom: 20px;
+    left: 12px;
+    z-index: 500;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+  }
+  .legend .row { display: flex; align-items: center; gap: 6px; padding: 2px 0; }
+  .legend .swatch { width: 11px; height: 11px; }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 600;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--page-plane) 75%, transparent);
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-secondary);
+    padding: 20px;
+  }
+  .overlay.visible { display: flex; }
+  .overlay .box {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 22px;
+    max-width: 320px;
+  }
+  .overlay .err { color: var(--status-critical); font-weight: 600; margin-bottom: 4px; }
+
+  .leaflet-popup-content { font-size: 13px; }
+  .popup-cat { font-weight: 600; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SurgeExposure</h1>
+  <p>Storm-surge &amp; flood exposure for building footprints — pick a place to score buildings against live NOAA hazard data.</p>
+</header>
+
+<div class="controls">
+  <input id="search-input" type="text" placeholder="Search an address or place (e.g. Key West, FL)" />
+  <button id="search-btn" class="primary">Search</button>
+  <span class="chip">or try:</span>
+  <span id="presets"></span>
+</div>
+
+<div class="stats" id="stats" style="display:none">
+  <div class="tile">
+    <div class="value" id="stat-total">0</div>
+    <div class="label">Buildings scored</div>
+  </div>
+  <div class="tile">
+    <div class="value" id="stat-none">0</div>
+    <div class="label"><span class="swatch" style="background:var(--status-none)"></span>None</div>
+  </div>
+  <div class="tile">
+    <div class="value" id="stat-low">0</div>
+    <div class="label"><span class="swatch" style="background:var(--status-good)"></span>Low</div>
+  </div>
+  <div class="tile">
+    <div class="value" id="stat-moderate">0</div>
+    <div class="label"><span class="swatch" style="background:var(--status-warning)"></span>Moderate</div>
+  </div>
+  <div class="tile">
+    <div class="value" id="stat-high">0</div>
+    <div class="label"><span class="swatch" style="background:var(--status-serious)"></span>High</div>
+  </div>
+  <div class="tile">
+    <div class="value" id="stat-severe">0</div>
+    <div class="label"><span class="swatch" style="background:var(--status-critical)"></span>Severe</div>
+  </div>
+</div>
+
+<main>
+  <div id="map"></div>
+  <div class="legend">
+    <div class="row"><span class="swatch" style="background:var(--status-none)"></span>None</div>
+    <div class="row"><span class="swatch" style="background:var(--status-good)"></span>Low</div>
+    <div class="row"><span class="swatch" style="background:var(--status-warning)"></span>Moderate</div>
+    <div class="row"><span class="swatch" style="background:var(--status-serious)"></span>High</div>
+    <div class="row"><span class="swatch" style="background:var(--status-critical)"></span>Severe</div>
+  </div>
+  <div class="overlay" id="overlay">
+    <div class="box">
+      <div id="overlay-text">Loading&hellip;</div>
+    </div>
+  </div>
+</main>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const CATEGORY_COLOR = {
+  none: getVar('--status-none'),
+  low: getVar('--status-good'),
+  moderate: getVar('--status-warning'),
+  high: getVar('--status-serious'),
+  severe: getVar('--status-critical'),
+};
+function getVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+const map = L.map('map', { zoomControl: true }).setView([28.5, -85.0], 5);
+L.tileLayer(
+  isDark
+    ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+    : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  { attribution: '&copy; OpenStreetMap contributors &copy; CARTO', maxZoom: 19 }
+).addTo(map);
+
+let currentLayer = null;
+
+const overlay = document.getElementById('overlay');
+const overlayText = document.getElementById('overlay-text');
+const searchBtn = document.getElementById('search-btn');
+const searchInput = document.getElementById('search-input');
+
+function showOverlay(text, isError) {
+  overlay.classList.add('visible');
+  overlayText.innerHTML = isError ? `<div class="err">${text}</div>` : text;
+}
+function hideOverlay() {
+  overlay.classList.remove('visible');
+}
+function setBusy(busy) {
+  searchBtn.disabled = busy;
+  document.querySelectorAll('.preset-btn').forEach((b) => (b.disabled = busy));
+}
+
+async function loadPresets() {
+  const res = await fetch('/locations');
+  const presets = await res.json();
+  const container = document.getElementById('presets');
+  presets.forEach((p) => {
+    const btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.textContent = p.label;
+    btn.style.marginLeft = '4px';
+    btn.addEventListener('click', () => runQuery(p.bbox, p.label));
+    container.appendChild(btn);
+  });
+  // Auto-load the first preset so the page shows something immediately.
+  if (presets.length) runQuery(presets[0].bbox, presets[0].label);
+}
+
+async function handleSearch() {
+  const q = searchInput.value.trim();
+  if (!q) return;
+  setBusy(true);
+  showOverlay(`Looking up "${q}"&hellip;`);
+  try {
+    const res = await fetch(`/geocode?q=${encodeURIComponent(q)}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || 'Location not found');
+    }
+    const loc = await res.json();
+    await runQuery(loc.bbox, loc.display_name);
+  } catch (err) {
+    showOverlay(err.message || 'Something went wrong', true);
+    setBusy(false);
+  }
+}
+
+async function runQuery(bbox, label) {
+  setBusy(true);
+  showOverlay(`Scoring buildings near ${label}&hellip;<br><span style="font-size:12px">First look at a new area can take ~30-40s (live query against Overture Maps).</span>`);
+  try {
+    const bboxStr = bbox.join(',');
+    const res = await fetch(`/exposure?bbox=${bboxStr}&limit=500`);
+    if (!res.ok) throw new Error(`API error (${res.status})`);
+    const geojson = await res.json();
+    renderGeoJSON(geojson);
+    hideOverlay();
+  } catch (err) {
+    showOverlay(err.message || 'Something went wrong', true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function renderGeoJSON(geojson) {
+  if (currentLayer) map.removeLayer(currentLayer);
+
+  const counts = { none: 0, low: 0, moderate: 0, high: 0, severe: 0 };
+  for (const f of geojson.features) {
+    const cat = f.properties.exposure_category || 'none';
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+  document.getElementById('stats').style.display = 'flex';
+  document.getElementById('stat-total').textContent = geojson.features.length;
+  document.getElementById('stat-none').textContent = counts.none;
+  document.getElementById('stat-low').textContent = counts.low;
+  document.getElementById('stat-moderate').textContent = counts.moderate;
+  document.getElementById('stat-high').textContent = counts.high;
+  document.getElementById('stat-severe').textContent = counts.severe;
+
+  currentLayer = L.geoJSON(geojson, {
+    style: (feature) => {
+      const cat = feature.properties.exposure_category || 'none';
+      const color = CATEGORY_COLOR[cat] || CATEGORY_COLOR.none;
+      return { color, fillColor: color, weight: 1, fillOpacity: 0.65 };
+    },
+    onEachFeature: (feature, layer) => {
+      const p = feature.properties;
+      const cat = p.exposure_category || 'none';
+      layer.bindPopup(
+        `<div class="popup-cat" style="color:${CATEGORY_COLOR[cat] || CATEGORY_COLOR.none}">${cat.toUpperCase()}</div>` +
+        `<div>${p.class || p.subtype || 'building'}${p.num_floors ? ' · ' + p.num_floors + ' floors' : ''}</div>` +
+        `<div>Storm surge: ${(p.surge_ft || 0).toFixed(1)} ft</div>` +
+        `<div>Active flood extent: ${p.flood_active ? 'yes' : 'no'}</div>` +
+        `<div>Exposure score: ${(p.exposure_score || 0).toFixed(2)}</div>`
+      );
+    },
+  }).addTo(map);
+
+  if (geojson.features.length) {
+    map.fitBounds(currentLayer.getBounds(), { padding: [20, 20] });
+  }
+}
+
+searchBtn.addEventListener('click', handleSearch);
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') handleSearch();
+});
+
+loadPresets();
+</script>
+</body>
+</html>
