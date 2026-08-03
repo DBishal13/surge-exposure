@@ -1,5 +1,7 @@
 # SurgeExposure — Storm-Surge & Flood Exposure Pipeline for Utility/Property Assets
 
+![SurgeExposure map showing storm-surge exposure overlay for Clearwater Beach, FL](image.png)
+
 ## Description
 A reproducible data-engineering pipeline that ingests NOAA National Storm Surge Risk
 (MEOW/MOM) layers and NOAA NWPS flood-inundation polygons, overlays them against
