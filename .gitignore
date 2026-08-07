@@ -4,6 +4,7 @@ __pycache__/
 .env
 data/raw/
 data/cache/
+data/validation/
 *.duckdb
 *.parquet
 .DS_Store

@@ -99,9 +99,42 @@ See `scripts/precompute_regions.py` and `docs/`.
 is still ~35-40s (dominated by the live Overture GeoParquet scan) but a
 repeat request for the same area is ~60ms. See `api/cache.py`.
 
+## Validation against real losses
+`exposure_score` is currently a fixed, explainable heuristic (60% surge
+depth + 40% active flood intersection, see `pipeline.py`) — not calibrated
+against real outcomes. `scripts/validate_exposure_bins.py` checks that:
+it pulls real FEMA NFIP claims (`data/nfip.py`) for Lee County, FL (Fort
+Myers Beach, Sanibel, Cape Coral — hit directly by Hurricane Ian's 2022
+surge) and compares them against the pipeline's scored buildings for the
+same area.
+
+FEMA rounds NFIP claim coordinates to 1 decimal degree (~11km) before
+publishing, for privacy — coarser than this project's building-level
+scores, so the comparison can't be per-building. Instead both sides are
+snapped to that same 0.1° grid and aggregated per cell before comparing.
+Run it yourself (needs the SLOSH raster cached, see Setup, and live
+network access):
+```bash
+python scripts/validate_exposure_bins.py
+```
+It prints the per-cell table plus Pearson correlation between mean
+exposure score and (a) claim count and (b) mean amount paid per cell, and
+writes the table to `data/validation/lee_county_grid.csv`.
+
+**Actual result of a live run** (5,000 scored buildings, 48,117 NFIP
+claims, both scanning all of Lee County): only **5 grid cells** had both
+scored buildings and claims — mean exposure score correlated weakly with
+raw claim count (r = 0.21) but strongly with mean claim payout (r =
+0.81). With n=5 cells that's a hint, not a conclusion — but if it held up
+at a larger sample, it would mean the current score is a better proxy for
+*how bad* a claim is than for *how likely* a claim is, which would argue
+for reweighting the surge/flood split rather than assuming the fixed
+60/40 split does both equally well. A real recalibration should wait for
+a multi-county run with more overlapping cells.
+
 ## Next steps
-- Enrich with FEMA NFIP claims history to recalibrate the exposure weights
-  against observed losses instead of the current fixed 60/40 split.
+- Recalibrate the exposure weights against observed NFIP losses, informed
+  by the validation above (see it for current findings/limitations).
 - Persist scored results to PostGIS instead of (or alongside) DuckDB for
   multi-user access.
 - Deploy the live Docker image (not just the static showcase) to a

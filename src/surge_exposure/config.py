@@ -35,6 +35,8 @@ class Settings(BaseSettings):
         "https://www.nhc.noaa.gov/gis/hazardmaps/US_SLOSH_MOM_Inundation_v4.zip"
     )
 
+    nfip_base_url: str = "https://www.fema.gov/api/open/v3/NfipClaims"
+
 
 
 settings = Settings()
