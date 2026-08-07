@@ -26,6 +26,7 @@ dev = [
     "pytest>=8.3",
     "ruff>=0.7",
     "pillow>=10.4",
+    "matplotlib>=3.9",
 ]
 
 [build-system]

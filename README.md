@@ -119,12 +119,18 @@ python scripts/validate_exposure_bins.py
 ```
 It prints the per-cell table plus Pearson correlation between mean
 exposure score and (a) claim count and (b) mean amount paid per cell, and
-writes the table to `data/validation/lee_county_grid.csv`.
+writes the table to `data/validation/lee_county_grid.csv`. Regenerate the
+chart below from that CSV with `python scripts/plot_validation_chart.py`.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="validation-chart-dark.png">
+  <img src="validation-chart-light.png" alt="Two scatter plots: mean exposure score vs. NFIP claim count (r=0.20, weak) and vs. mean claim payout (r=0.81, strong) across 5 grid cells in Lee County, FL">
+</picture>
 
 **Actual result of a live run** (5,000 scored buildings, 48,117 NFIP
 claims, both scanning all of Lee County): only **5 grid cells** had both
 scored buildings and claims — mean exposure score correlated weakly with
-raw claim count (r = 0.21) but strongly with mean claim payout (r =
+raw claim count (r = 0.20) but strongly with mean claim payout (r =
 0.81). With n=5 cells that's a hint, not a conclusion — but if it held up
 at a larger sample, it would mean the current score is a better proxy for
 *how bad* a claim is than for *how likely* a claim is, which would argue
