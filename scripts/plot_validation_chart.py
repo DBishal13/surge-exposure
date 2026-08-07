@@ -1,5 +1,6 @@
-"""Render the Lee County NFIP validation results (data/validation/lee_county_grid.csv,
-produced by validate_exposure_bins.py) as a light/dark scatter-pair PNG for the README.
+"""Render the Lee County NFIP validation results (paper/data/lee_county_grid.csv,
+produced by validate_exposure_bins.py) as a light/dark scatter-pair PNG for
+paper/paper.md and the README.
 
 Two panels sharing an x-axis (mean exposure score per grid cell) rather than one
 dual-axis chart, since claim count and mean payout are different-scale measures.
@@ -18,7 +19,8 @@ import numpy as np
 import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-CSV_PATH = REPO_ROOT / "data" / "validation" / "lee_county_grid.csv"
+CSV_PATH = REPO_ROOT / "paper" / "data" / "lee_county_grid.csv"
+FIGURES_DIR = REPO_ROOT / "paper" / "figures"
 
 PANELS = [
     ("claim_count", "Claim count", "{x:,.0f}"),
@@ -99,8 +101,9 @@ def render(df: pd.DataFrame, theme: dict, out_path: Path) -> None:
 
 def main() -> None:
     df = pd.read_csv(CSV_PATH)
+    FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     for mode, theme in THEMES.items():
-        out_path = REPO_ROOT / f"validation-chart-{mode}.png"
+        out_path = FIGURES_DIR / f"validation-chart-{mode}.png"
         render(df, theme, out_path)
         print(f"Wrote {out_path}")
 
