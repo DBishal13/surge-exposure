@@ -126,19 +126,30 @@ chart below from that CSV with `python scripts/plot_validation_chart.py`.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="paper/figures/validation-chart-dark.png">
-  <img src="paper/figures/validation-chart-light.png" alt="Two scatter plots: mean exposure score vs. NFIP claim count and vs. mean claim payout across grid cells in Lee County, FL">
+  <img src="paper/figures/validation-chart-light.png" alt="Two scatter plots across 37 Lee County grid cells: mean exposure score vs. NFIP claim count (r=0.37) and vs. mean claim payout (r=0.52)">
 </picture>
 
-**See [paper/paper.md](paper/paper.md) §6 for the current results and
-§8 for limitations** — a prior version of this validation under-sampled
-buildings outside one coastal strip (a query-ordering bug, documented in
-the paper) and has since been re-run with a fixed, county-wide per-cell
-sampling method. A real recalibration of the 60/40 split should wait for
-a multi-county run with more overlapping cells.
+**Actual result of the (corrected, county-wide) live run:** 18,050 scored
+buildings and 48,105 NFIP claims across all 37 grid cells the county spans.
+Mean exposure score correlated moderately with claim count (r = 0.37) and
+mean claim payout (r = 0.52) — real but modest. One catch worth knowing
+about: `flood_active` is a *live* NOAA feed with no historical replay, so
+querying it in 2026 for a 2022 storm returned zero active flooding
+everywhere — every score in this study was really just its 60% surge term.
+That surge signal is spatially sensible (coastal cells score ~2x higher on
+average than inland, 0.081 vs 0.039) but incomplete: inland cells actually
+had *more* claims than coastal (25,755 vs 22,350), and ~30% of all claims
+sit in cells with a near-zero score — Hurricane Ian's inland damage was
+largely rainfall-driven riverine flooding, which a live-only,
+surge-focused score isn't positioned to see. Full writeup:
+[paper/paper.md](paper/paper.md) §6-§7.
 
 ## Next steps
-- Recalibrate the exposure weights against observed NFIP losses, informed
-  by the validation above (see it for current findings/limitations).
+- Give the active-flood term a historical/event-specific data source
+  instead of only the live feed, then confirm or extend its coverage to
+  rainfall-driven flooding — the validation study found this matters more
+  than reweighting the surge/flood split (see
+  [paper/paper.md](paper/paper.md) §7, §9).
 - Persist scored results to PostGIS instead of (or alongside) DuckDB for
   multi-user access.
 - Deploy the live Docker image (not just the static showcase) to a

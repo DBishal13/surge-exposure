@@ -12,23 +12,34 @@ number in §6.
 
 ## Abstract
 
-*[Results/Discussion/Conclusion to be finalized once the live validation run
-completes — see §6.]* Most publicly visible flood/storm-surge exposure
-tools are either closed commercial systems (First Street Foundation, Fathom
-Global, FEMA's Risk Rating 2.0) whose scoring methodology and validation are
-disclosed only partially, or research prototypes that stop at a demo map
-without ever checking the score against outcomes. This report documents
-SurgeExposure, an open, fully reproducible pipeline that scores building
-footprints for storm-surge and flood exposure using only public data (NOAA
-SLOSH, NOAA NWM, Overture Maps) and a transparent, explainable scoring
-heuristic, and then — the part most comparable tools skip in public — checks
-that heuristic against real losses. Using FEMA's OpenFEMA NFIP claims API,
-we compare SurgeExposure's building-level exposure scores against real flood
-insurance claims for Lee County, FL following Hurricane Ian (2022), at the
-0.1° grid-cell resolution NFIP's privacy rounding permits. We report Pearson
-correlations between mean exposure score and both claim frequency and mean
-claim severity per cell, and discuss what a lightweight, explainable
-heuristic score can and cannot be trusted to predict.
+Most publicly visible flood/storm-surge exposure tools are either closed
+commercial systems (First Street Foundation, Fathom Global, FEMA's Risk
+Rating 2.0) whose scoring methodology and validation are disclosed only
+partially, or research prototypes that stop at a demo map without ever
+checking the score against outcomes. This report documents SurgeExposure,
+an open, fully reproducible pipeline that scores building footprints for
+storm-surge and flood exposure using only public data (NOAA SLOSH, NOAA
+NWM, Overture Maps) and a transparent, explainable scoring heuristic, and
+then — the part most comparable tools skip in public — checks that
+heuristic against real losses. Using FEMA's OpenFEMA NFIP claims API, we
+compare SurgeExposure's building-level exposure scores against 48,105 real
+flood insurance claims for Lee County, FL following Hurricane Ian (2022), at
+the 0.1° grid-cell resolution (37 cells) NFIP's privacy rounding permits.
+Mean exposure score correlated moderately with both claim frequency
+(*r* = 0.37) and mean claim severity (*r* = 0.52) across cells — weaker
+than a first, methodologically flawed pass suggested (§5.3). A live-data
+artifact sharpens the read: the score's active-flood-extent term is a
+present-conditions feed with no historical replay, so it registered
+nothing for a 2022 storm queried in 2026, and every score in this study
+reduces to its storm-surge term alone. That surge signal is concentrated
+correctly: roughly 30% of claims sit in cells with near-zero exposure
+score, almost all in the county's inland east, where Hurricane Ian's
+damage came from rainfall-driven riverine flooding a storm-surge-only
+signal was never going to see. We discuss what a lightweight, explainable,
+surge-only heuristic score can and cannot be trusted to predict, and argue
+the main lesson is scope, not calibration: the score isn't wrong about
+surge exposure, it is silent about a different hazard the same storm also
+produced.
 
 ## 1. Introduction
 
@@ -127,7 +138,13 @@ Leaflet frontend (live) + static GitHub Pages showcase (8 precomputed regions)
 - **Active flood extent — NOAA NWM.** Live, hourly-updated
   analysis-and-assimilation flood-inundation-mapping polygons from NOAA's
   HydroVIS ArcGIS services (`data/flood_inundation.py`), intersected against
-  building footprints.
+  building footprints. This is a *current-conditions* feed — `get_inundation_extent`
+  takes no date parameter and queries whatever is flooded right now — with
+  no historical replay capability in this codebase. It can in principle
+  register riverine/pluvial flooding as well as coastal, but only if that
+  flooding is happening at query time; a fact that matters directly for §6,
+  where this study's query (mid-2026) necessarily returned zero active
+  extent for a 2022 storm.
 - **Ground truth for validation — FEMA NFIP claims.** Built specifically for
   this study (`data/nfip.py`): a client for FEMA's OpenFEMA NFIP claims API
   (v3), described fully in §5.
@@ -354,20 +371,99 @@ main [README](../README.md#setup)).
 
 ## 6. Results
 
-*[PENDING — the live per-cell validation run was still in progress at the
-time this section was drafted. This section will be filled in with the
-actual grid-cell table, correlation coefficients, and updated chart the
-moment that run completes — no placeholder numbers are reported here.]*
+The per-cell run scored **18,050 buildings** across **37 grid cells**
+covering essentially all of Lee County, and matched them against **48,105**
+NFIP claims (after outlier filtering, §5) in those same 37 cells — full
+county-wide overlap, unlike the 5-cell overlap the flawed first pass
+produced (§5.3). Full per-cell data: [`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/validation-chart-dark.png">
+  <img src="figures/validation-chart-light.png" alt="Two scatter plots across 37 Lee County grid cells: mean exposure score vs. NFIP claim count (r=0.37) and vs. mean claim payout (r=0.52)">
+</picture>
+
+**H1 (claim frequency):** mean `exposure_score` correlated with claim count
+at **r = 0.37** — a real but modest positive relationship, weaker than the
+r = 0.20 the flawed 5-cell pass found, and far weaker than that pass's
+severity correlation of r = 0.81 (§5.3) suggested the eventual pattern
+would be.
+
+**H2 (claim severity):** mean `exposure_score` correlated with mean claim
+payout at **r = 0.52** — moderate, and, as with H1, higher than the
+frequency correlation but by a much smaller margin than the first pass
+implied. Both hypotheses are supported directionally; neither is a strong
+relationship.
+
+**The more informative pattern was spatial, not statistical.** Splitting
+the county's cells at roughly the coastline (lon ≤ -82.0° vs. lon > -82.0°):
+coastal cells average a mean exposure score of **0.081**, inland cells
+**0.039** — the score correctly recognizes the coast as more exposed, by a
+factor of ~2. But claim volume does not track that split: coastal cells
+account for 22,350 claims, inland cells **25,755** — Lee County's *interior*
+generated more claims than its scored-as-riskier coastline. Roughly **30%
+of all claims (14,605 of 48,105) sit in cells with a mean exposure score
+below 0.02** — near the pipeline's effective floor — concentrated in the
+county's eastern cells (grid longitude -81.6 to -81.9, inland Fort Myers
+and Lehigh Acres). The highest-scoring cell in the dataset (26.4°N,
+-81.9°W, score 0.196) sits at the coastal/inland boundary and does carry
+substantial claims (4,763) — but several purely inland cells (e.g. 26.6°N,
+-82.0°W: score 0.0065, 4,619 claims; 26.6°N, -81.9°W: score 0.0002, 3,375
+claims) carry comparable claim volume with a score indistinguishable from
+zero.
+
+**One more fact changes how to read all of the above: the active-flood term
+contributed nothing in this run.** Querying `data/flood_inundation.py`'s
+live NWM feed for the full county extent, in mid-2026, returns zero active
+inundation polygons — expected, since Lee County is not presently flooding
+and the feed has no historical replay capability (§2.2). That means
+`flood_active` was `False` for every one of the 18,050 buildings scored
+here, and every `exposure_score` in this study reduces exactly to its
+surge term: `0.6 * min(surge_ft, 20) / 20`. §6's correlations are therefore
+correlations against **SLOSH surge depth alone**, not against the full
+60/40 formula — the 40% flood-extent weight was structurally inert for
+this entire validation, through no fault of the buildings scored.
 
 ## 7. Discussion
 
-*[To be completed alongside §6.]* The discussion will interpret whatever
-H1/H2 pattern the real numbers show against §3 — in particular, whether
-depth-driven severity prediction (plausible given Wing et al.'s finding
-that depth relates to damage in complex, non-flat ways, §3.4) outperforms
-depth-driven frequency prediction (which is more about whether water
-reached a structure at all than how graded the exposure is), and what that
-would or would not imply for reweighting §2.3's 60/40 heuristic.
+Both hypotheses hold directionally (§6), but the moderate correlations
+understate the more useful finding: **`exposure_score` is not miscalibrated
+so much as, for this validation, it was only ever able to measure one of
+its two inputs.** The active-flood term was inert throughout (§6) because
+it is a real-time feed with no way to look back at a 2022 storm from 2026
+(§2.2) — so what this study actually validated is SLOSH surge depth against
+real losses, not the blended score the tool ships. Hurricane Ian produced
+catastrophic rainfall well beyond its surge zone, and Lee County's inland
+cells — scored near zero by a surge-only signal, correctly, since surge
+does not reach that far inland — nonetheless produced as many claims as the
+coast. A correlation computed across *all* 37 cells necessarily blends a
+real, positive within-hazard-scope relationship (surge score does track
+surge-zone claims reasonably, per the top-scoring cells) with a population
+of inland cells surge depth was never going to explain, which drags the
+overall *r* toward the moderate values in §6 rather than the strong ones a
+surge-scoped comparison alone might show.
+
+This reframes what the 60/40 surge/flood weighting question (§2.3, §1.2)
+even is. The original question — "should surge count for more or less than
+flood-extent within the score" — presupposes both terms were actually
+contributing during this validation; §6 shows the flood-extent term simply
+wasn't. The gap this study surfaces isn't a *reweighting* of surge vs.
+active-flood-extent, it's that the active-flood term needs a
+**historical/event-specific data source** (§9) before a validation like
+this one can say anything about it at all — and separately, that neither
+input, even fixed, obviously covers rainfall-driven riverine flooding the
+way the inland-claims pattern suggests it should. Wing et al.'s finding
+that depth alone predicts loss magnitude poorly (§3.4) is consistent with,
+though not identical to, this: here the deeper problem precedes depth
+entirely — for roughly a third of the county's claims, the model's depth input is simply
+inapplicable, not merely imprecise.
+
+Practically, for SurgeExposure specifically, this argues against reweighting
+`SURGE_WEIGHT`/`FLOOD_WEIGHT` as the next step (§1.2's original framing) and
+for scope-labeling instead: the tool should describe itself as a
+*storm-surge* exposure score, not a general flood exposure score, until a
+riverine/pluvial hazard layer is added (§9). That is a smaller, more honest
+change than recalibrating weights that were never trying to model the
+hazard that actually explains a third of the county's real losses.
 
 ## 8. Limitations
 
@@ -412,6 +508,13 @@ weight these results can carry:
 
 ## 9. Future Work
 
+- **Give the active-flood term a historical/event-specific data source**
+  (e.g. NOAA NWM's retrospective streamflow archive) instead of only the
+  live feed — §6 found it was completely inert for this study, which used
+  today's conditions to score a 2022 storm.
+- **Add or confirm riverine/pluvial coverage** once the term above is
+  fixed — §7 argues this, not reweighting `SURGE_WEIGHT`/`FLOOD_WEIGHT`, is
+  what §6's inland-claims pattern actually calls for.
 - Replicate across multiple counties/coastlines and multiple storm events
   before treating any correlation as informative for reweighting
   `SURGE_WEIGHT`/`FLOOD_WEIGHT` in `pipeline.py`.
@@ -429,7 +532,26 @@ weight these results can carry:
 
 ## 10. Conclusion
 
-*[To be completed alongside §6.]*
+SurgeExposure's `exposure_score` correlates with real Hurricane Ian NFIP
+claims at a moderate level (*r* = 0.37 for frequency, *r* = 0.52 for
+severity, §6) — enough to say the heuristic is not meaningless, not enough
+to call it validated. The more useful finding was not the correlation
+strength but its shape: the storm-surge signal this study actually measured
+(the active-flood term was inert throughout, §6) tracks claims reasonably
+within the surge zone it models, and says almost nothing about the roughly
+third of Lee County's claims that came from inland, rainfall-driven
+flooding outside that zone. The honest fix implied by this report is not
+tuning the existing 60/40 weighting (§2.3) but two more specific things:
+giving the active-flood term a historical data source so it can contribute
+at all in a study like this one, and confirming or extending its hazard
+coverage to rainfall-driven flooding once it does (§9). This report's
+central methodological point
+survives the specific numbers either way: a small, fully public validation
+— published data, published code, published bugs (§5.3) and all — is more
+useful than a larger, asserted-but-unverifiable one, precisely because a
+reader can find the same third-of-claims pattern in
+[`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv) that this
+report found, and does not have to take the report's word for it.
 
 ## References
 

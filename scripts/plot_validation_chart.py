@@ -59,7 +59,7 @@ def _corr(df: pd.DataFrame, col: str) -> float:
 def render(df: pd.DataFrame, theme: dict, out_path: Path) -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9, 4), facecolor=theme["surface"])
     fig.suptitle(
-        "Lee County, FL — exposure score vs. real NFIP claims (5 grid cells)",
+        f"Lee County, FL — exposure score vs. real NFIP claims ({len(df)} grid cells)",
         color=theme["primary"],
         fontsize=12,
         fontweight="bold",
