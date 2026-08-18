@@ -21,10 +21,18 @@ Run against the already-cached SLOSH raster (see README Setup):
 
     source .venv/bin/activate
     python scripts/validate_exposure_bins.py
+
+Pass --ian-window to restrict claims to dateOfLoss within IAN_WINDOW below
+(paper.md Limitation 5 / Future Work: the unrestricted run folds in claims
+from unrelated flood events sharing the same grid cells). Output goes to a
+separate CSV so the unrestricted result isn't overwritten:
+
+    python scripts/validate_exposure_bins.py --ian-window
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import geopandas as gpd
@@ -36,9 +44,18 @@ from surge_exposure.pipeline import run_exposure_pipeline
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUT_CSV = REPO_ROOT / "paper" / "data" / "lee_county_grid.csv"
+OUT_CSV_IAN_WINDOW = REPO_ROOT / "paper" / "data" / "lee_county_grid_ian_window.csv"
 
 STATE = "FL"
 COUNTY_CODES = ["12071"]  # Lee County, FL
+
+# Hurricane Ian made landfall in Lee County 2022-09-28. This window keeps
+# dateOfLoss values from four weeks before landfall (storm-adjacent surge/
+# rainfall claims sometimes get an early loss date from initial flooding
+# ahead of the eyewall) through three months after (typical NFIP
+# claims-filing tail for a single event), and drops everything else --
+# unrelated storms and routine flood claims sharing the same grid cells.
+IAN_WINDOW = ("2022-08-31", "2022-12-31")
 
 # A handful of NFIP claims come back mis-coded well outside the county
 # (e.g. lat 29.4 for a Lee County record) -- drop grid cells outside this
@@ -101,10 +118,34 @@ def _score_buildings_for_cell(grid_lat: float, grid_lon: float) -> gpd.GeoDataFr
     return run_exposure_pipeline(bbox, building_limit=PER_CELL_BUILDING_LIMIT)
 
 
+def _restrict_to_ian_window(claims: pd.DataFrame) -> pd.DataFrame:
+    """Keep only claims whose dateOfLoss falls in IAN_WINDOW. A handful of
+    rows have missing/unparseable dateOfLoss and are dropped rather than
+    kept by default -- the point of this filter is to exclude anything
+    not confidently attributable to Ian, and an unparseable date doesn't
+    earn the benefit of the doubt."""
+    # FEMA's live API returns tz-aware dateOfLoss values; normalize to UTC
+    # then drop the tz so they're comparable to the naive IAN_WINDOW bounds.
+    loss_date = pd.to_datetime(claims["dateOfLoss"], errors="coerce", utc=True).dt.tz_localize(None)
+    start, end = pd.Timestamp(IAN_WINDOW[0]), pd.Timestamp(IAN_WINDOW[1])
+    return claims[loss_date.between(start, end)]
+
+
 def main() -> None:
+    ian_window = "--ian-window" in sys.argv[1:]
+    out_csv = OUT_CSV_IAN_WINDOW if ian_window else OUT_CSV
+
     print(f"Fetching NFIP claims for state={STATE} county={COUNTY_CODES}...")
     claims = nfip.get_claims(state=STATE, county_codes=COUNTY_CODES)
     print(f"{len(claims)} NFIP claims fetched.")
+
+    if ian_window:
+        before = len(claims)
+        claims = _restrict_to_ian_window(claims)
+        print(
+            f"--ian-window: restricted dateOfLoss to {IAN_WINDOW[0]}..{IAN_WINDOW[1]} "
+            f"-- {before} claims -> {len(claims)} claims ({before - len(claims)} dropped)."
+        )
 
     cells = _claim_cells_in_bounds(claims)
     print(f"{len(cells)} distinct claim grid cells within the county bounds to score buildings for.")
@@ -133,9 +174,9 @@ def main() -> None:
     print(f"\ncorrelation(mean_exposure_score, claim_count)      = {corr_claim_count:.3f}")
     print(f"correlation(mean_exposure_score, mean_amount_paid) = {corr_amount_paid:.3f}")
 
-    OUT_CSV.parent.mkdir(parents=True, exist_ok=True)
-    merged.to_csv(OUT_CSV, index=False)
-    print(f"\nWrote per-cell table to {OUT_CSV}")
+    out_csv.parent.mkdir(parents=True, exist_ok=True)
+    merged.to_csv(out_csv, index=False)
+    print(f"\nWrote per-cell table to {out_csv}")
 
 
 if __name__ == "__main__":

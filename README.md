@@ -2,18 +2,25 @@
 
 ![SurgeExposure map showing storm-surge exposure overlay for Clearwater Beach, FL](image.png)
 
+**Research finding: a lightweight, explainable storm-surge exposure score
+correlates with real Hurricane Ian claim severity robustly (r≈0.52, stable
+under a date-window sensitivity check) but with claim frequency only
+weakly and unreliably (r=0.25–0.37, depending on that same check) — and it
+is silent about roughly a third of the county's real claims, which came
+from inland, rainfall-driven flooding a surge-only signal was never going
+to see.** That's not a calibration problem, it's a scope problem, and
+distinguishing which of the score's two correlations actually deserves
+trust is the more useful result of the two — full validation study,
+literature review, and two honestly-reported methodological bugs found
+along the way: **[paper/paper.md](paper/paper.md)**.
+
 ## Description
-A reproducible data-engineering pipeline that ingests NOAA National Storm Surge Risk
+A reproducible pipeline that ingests NOAA National Storm Surge Risk
 (MEOW/MOM) layers and NOAA NWPS flood-inundation polygons, overlays them against
 building/infrastructure footprints from Overture Maps (GeoParquet), and produces
 per-asset exposure scores plus an interactive map and an API endpoint. Optionally
-enriched with FEMA NFIP claims to show historical loss.
-
-## Why it stands out
-Combines flood-hazard/FEMA research background with cloud-native geospatial (GeoParquet +
-DuckDB + Overture GERS IDs) and a real utility/insurance use case (which assets are
-surge-exposed). It's a pipeline, not a notebook, and mirrors what an insurer or utility
-risk team actually needs. Florida (FPL territory) is the ideal demo region.
+enriched with FEMA NFIP claims to check the score against real historical loss —
+see the finding above and the validation study below.
 
 ## Open data
 - NOAA National Storm Surge Risk Maps
@@ -22,12 +29,16 @@ risk team actually needs. Florida (FPL territory) is the ideal demo region.
 - FEMA NFIP redacted claims
 
 ## Tech stack
-Python, DuckDB spatial (query Overture GeoParquet directly on S3), GeoPandas, FastAPI,
-PostGIS for persistence, leafmap/deck.gl for the map, AWS deployment.
+Python, DuckDB spatial (query Overture GeoParquet directly on S3), GeoPandas,
+FastAPI, Folium/Leaflet for the map, Docker for local/self-hosted deployment.
+No database persistence layer or cloud deployment exists yet — see Next
+steps below for what's actually planned versus built.
 
 ## Status
-Working MVP. Demo region: a coastal strip of Miami-Dade County (FPL/South
-Florida service territory), configurable via `bbox` query params.
+Working MVP, plus a completed validation study (see the finding above and
+[paper/paper.md](paper/paper.md)). Demo region: a coastal strip of
+Miami-Dade County (FPL/South Florida service territory), configurable via
+`bbox` query params; the validation study itself covers Lee County, FL.
 
 ## Setup
 ```bash
@@ -141,8 +152,23 @@ average than inland, 0.081 vs 0.039) but incomplete: inland cells actually
 had *more* claims than coastal (25,755 vs 22,350), and ~30% of all claims
 sit in cells with a near-zero score — Hurricane Ian's inland damage was
 largely rainfall-driven riverine flooding, which a live-only,
-surge-focused score isn't positioned to see. Full writeup:
-[paper/paper.md](paper/paper.md) §6-§7.
+surge-focused score isn't positioned to see.
+
+**A follow-up check found the r=0.37 number is softer than it looks.** The
+run above uses *all* years of Lee County NFIP claims (1978–2026), not just
+Ian's. Restricting to a tight post-Ian date window
+(`python scripts/validate_exposure_bins.py --ian-window`) drops 40% of raw
+claims (19,290 of 48,117) as attributable to unrelated flood events — and
+under that stricter, more defensible comparison, claim frequency's
+correlation weakens by a third (r = 0.37 → **0.25**) while claim severity's
+barely moves (r = 0.52 → **0.516**). Read this as: the score's ability to
+flag *which cells see catastrophic losses* looks real and fairly robust;
+its ability to predict *how many claims* a cell sees was partly an
+artifact of comparing against decades of unrelated claims, not something
+`exposure_score` itself earns credit for. Full writeup, including a second
+real bug caught building this check (a timezone mismatch between FEMA's
+API and the filter, now covered by a regression test):
+[paper/paper.md](paper/paper.md) §5.4, §6, §6.1, §7.
 
 ## Next steps
 - Give the active-flood term a historical/event-specific data source

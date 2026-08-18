@@ -27,19 +27,27 @@ flood insurance claims for Lee County, FL following Hurricane Ian (2022), at
 the 0.1° grid-cell resolution (37 cells) NFIP's privacy rounding permits.
 Mean exposure score correlated moderately with both claim frequency
 (*r* = 0.37) and mean claim severity (*r* = 0.52) across cells — weaker
-than a first, methodologically flawed pass suggested (§5.3). A live-data
-artifact sharpens the read: the score's active-flood-extent term is a
-present-conditions feed with no historical replay, so it registered
-nothing for a 2022 storm queried in 2026, and every score in this study
-reduces to its storm-surge term alone. That surge signal is concentrated
-correctly: roughly 30% of claims sit in cells with near-zero exposure
-score, almost all in the county's inland east, where Hurricane Ian's
-damage came from rainfall-driven riverine flooding a storm-surge-only
-signal was never going to see. We discuss what a lightweight, explainable,
-surge-only heuristic score can and cannot be trusted to predict, and argue
-the main lesson is scope, not calibration: the score isn't wrong about
-surge exposure, it is silent about a different hazard the same storm also
-produced.
+than a first, methodologically flawed pass suggested (§5.3). A sensitivity
+check restricting claims to Ian's own date window (dropping 40% of raw
+claims attributable to unrelated flood events over NFIP's 1978–2026
+history, §5.4/§6.1) shows the two hypotheses are not equally trustworthy:
+the severity correlation barely moves (*r* = 0.516) but the frequency
+correlation weakens by a third (*r* = 0.25) — evidence that part of the
+original frequency signal was multi-year claims noise, not something
+`exposure_score` actually predicts. A live-data artifact sharpens the read
+further: the score's active-flood-extent term is a present-conditions feed
+with no historical replay, so it registered nothing for a 2022 storm
+queried in 2026, and every score in this study reduces to its storm-surge
+term alone. That surge signal is concentrated correctly: roughly 30% of
+claims sit in cells with near-zero exposure score, almost all in the
+county's inland east, where Hurricane Ian's damage came from
+rainfall-driven riverine flooding a storm-surge-only signal was never
+going to see. We discuss what a lightweight, explainable, surge-only
+heuristic score can and cannot be trusted to predict, and argue the main
+lesson is scope, not calibration: the score isn't wrong about surge
+exposure, it is silent about a different hazard the same storm also
+produced, and its frequency correlation should be trusted considerably
+less than its severity correlation.
 
 ## 1. Introduction
 
@@ -85,6 +93,13 @@ and checked.
    result here is an *ecological correlation* at ~0.1° grid resolution, not
    a building-level finding, because NFIP's public claims data is
    privacy-rounded and cannot support anything finer.
+5. **A sensitivity check that changes which headline number should be
+   trusted** (§5.4/§6.1): restricting claims to Ian's own date window shows
+   the frequency correlation (H1) is substantially inflated by unrelated
+   multi-year claims noise (r=0.37 → 0.25) while the severity correlation
+   (H2) is not (r=0.52 → 0.516) — a second documented bug (a timezone
+   mismatch, caught the same way as §5.3's) fixed and covered by a
+   regression test along the way.
 
 ## 2. System Design: SurgeExposure
 
@@ -369,6 +384,39 @@ scripted: `python scripts/validate_exposure_bins.py` reproduces §6 end to
 end (requires the cached SLOSH raster and live network access — see the
 main [README](../README.md#setup)).
 
+**5.4 Sensitivity check: restricting claims to Ian's own date window.** The
+main run above (§6) uses *all* available years of Lee County NFIP claims —
+1978 to the query date — not just claims attributable to Ian. That was a
+disclosed limitation (§8, original Limitation 5), not a fixed one: any
+grid cell's claim count could be inflated by unrelated flood events sharing
+that cell, with no way to tell from the headline number alone how much this
+mattered. `scripts/validate_exposure_bins.py --ian-window` closes that gap
+by re-running the identical pipeline with one change: claims are filtered
+to `dateOfLoss` within **2022-08-31 to 2022-12-31** (four weeks before
+Ian's 2022-09-28 landfall, through a three-month claims-filing tail) before
+aggregation. Building exposure scores are unaffected by this filter --
+buildings don't have a "date of loss" -- so any change in the correlations
+below isolates the effect of the claims-side date restriction specifically.
+Output goes to a separate file (`paper/data/lee_county_grid_ian_window.csv`)
+so the original, unrestricted run is preserved for comparison rather than
+overwritten.
+
+*A second real bug, caught the same way as the first (§5.3): trust the
+run, not the first result.* The first attempt at this filter crashed
+outright -- `TypeError: Cannot compare tz-naive and tz-aware datetime-like
+objects`. FEMA's live API returns `dateOfLoss` as a timezone-aware
+timestamp; the filter's window bounds were naive `Timestamp` objects with
+no timezone at all, and pandas correctly refuses to compare the two rather
+than silently guessing. Fixed by normalizing every parsed `dateOfLoss` to
+UTC and then dropping its timezone before comparison
+(`scripts/validate_exposure_bins.py::_restrict_to_ian_window`), and a
+regression test now reproduces the exact tz-aware timestamp shape the live
+API returns (`tests/test_validate_exposure_bins.py`) so this can't
+silently regress. Named here for the same reason §5.3 is: a bug that
+would have either crashed obviously (as it did) or, worse, silently
+produced a wrong window if the comparison had failed open instead of
+raising.
+
 ## 6. Results
 
 The per-cell run scored **18,050 buildings** across **37 grid cells**
@@ -423,6 +471,35 @@ correlations against **SLOSH surge depth alone**, not against the full
 60/40 formula — the 40% flood-extent weight was structurally inert for
 this entire validation, through no fault of the buildings scored.
 
+**6.1 Sensitivity check: restricting claims to Ian's own date window (§5.4).**
+Filtering `dateOfLoss` to 2022-08-31–2022-12-31 dropped **19,290 of 48,117
+claims (40%)** — a far larger share than the disclosed-but-unquantified
+Limitation 5 in the original draft implied. Three grid cells lost all
+their claims entirely and dropped out (37 → 34 overlapping cells); the
+remaining **16,550 scored buildings** matched against **28,827** real,
+Ian-window-only claims. The two hypotheses did *not* respond the same way:
+
+| | Unrestricted (all years, §6) | Ian window only (§6.1) | Change |
+|---|---|---|---|
+| Claims used | 48,105 | 28,827 | -40% |
+| Grid cells | 37 | 34 | -3 |
+| H1: r(score, claim count) | 0.37 | **0.25** | -0.12 |
+| H2: r(score, mean payout) | 0.52 | **0.516** | -0.004, essentially unchanged |
+
+**H1's correlation is not robust to this check; H2's is.** Restricting to
+claims plausibly caused by Ian weakens the frequency relationship by about
+a third (0.37 → 0.25) while leaving the severity relationship untouched.
+The natural read: **large-dollar claims cluster tightly with real,
+identifiable storm events almost regardless of which storm** (a
+catastrophic payout in Lee County is unlikely to come from routine,
+non-storm flooding, so restricting to Ian's window removes few *severe*
+claims specifically), while a substantial share of *routine, low-dollar*
+claims recorded over 1978–2026 are unrelated background noise that happens
+to weakly echo the same coastal-vs-inland geography the score also
+encodes — inflating H1's unrestricted correlation without reflecting
+anything about Ian, or about `exposure_score`'s real skill, specifically.
+Full per-cell data: [`paper/data/lee_county_grid_ian_window.csv`](data/lee_county_grid_ian_window.csv).
+
 ## 7. Discussion
 
 Both hypotheses hold directionally (§6), but the moderate correlations
@@ -465,6 +542,21 @@ riverine/pluvial hazard layer is added (§9). That is a smaller, more honest
 change than recalibrating weights that were never trying to model the
 hazard that actually explains a third of the county's real losses.
 
+**§6.1's date-window check adds a second, independent caveat on top of the
+scope problem above: H1's r=0.37 headline number was itself partly an
+artifact of comparing against 44 years of undifferentiated claims, not
+just Ian's.** That the severity correlation (H2) barely moved under the
+same restriction (0.52 → 0.516) while the frequency correlation dropped by
+a third is itself informative, not just a robustness footnote: it suggests
+`exposure_score` may be doing real work distinguishing which cells see
+*catastrophic* losses, while its apparent ability to predict *how many*
+claims a cell sees was inflated by claims that have nothing to do with
+storm surge at all. A reader taking one number from this report as
+`exposure_score`'s "real" skill should treat H2's r≈0.52 as the more
+trustworthy of the two, and H1's r=0.25–0.37 as bracketing a genuinely
+uncertain, window-dependent estimate rather than picking whichever end of
+that range is more flattering.
+
 ## 8. Limitations
 
 However §6 turns out, the following hold regardless and bound how much
@@ -486,12 +578,16 @@ weight these results can carry:
    storm, one coastline, one building stock. Nothing here generalizes to a
    different storm, coastline type, or state without independent
    replication.
-5. **Claims data quality.** Per Shin et al. (2022, §3.3), NFIP
-   hazard-attribution fields for Florida are known to be
-   incomplete/incorrect in places; this study did not perform their
-   correction procedure, and claims are not restricted to Ian
-   specifically — some `dateOfLoss` values in the dataset predate 2022,
-   folding in unrelated flood events within the same cells.
+5. **Claims data quality, now quantified rather than only disclosed.** Per
+   Shin et al. (2022, §3.3), NFIP hazard-attribution fields for Florida are
+   known to be incomplete/incorrect in places; this study did not perform
+   their full correction procedure. What §6.1 adds: restricting claims to
+   Ian's own date window drops 40% of raw claims and weakens H1's
+   correlation from r=0.37 to r=0.25, while H2 barely moves (0.52 → 0.516)
+   — so the unrelated-event contamination this limitation describes turns
+   out to matter substantially for claim frequency and hardly at all for
+   claim severity, not equally for both as the original draft of this
+   limitation implied.
 6. **No control for building value, age, or elevation.** Wing et al. (2020,
    §3.4) found these materially affect loss given depth. `exposure_score`
    doesn't model them, and neither does this validation.
@@ -518,8 +614,13 @@ weight these results can carry:
 - Replicate across multiple counties/coastlines and multiple storm events
   before treating any correlation as informative for reweighting
   `SURGE_WEIGHT`/`FLOOD_WEIGHT` in `pipeline.py`.
-- Restrict claims to a tight post-Ian date window to reduce the
-  unrelated-event contamination noted in Limitation 5.
+- ~~Restrict claims to a tight post-Ian date window~~ — done (§5.4, §6.1):
+  H1 is window-sensitive (r=0.37 unrestricted vs. 0.25 restricted), H2
+  is not (0.52 vs. 0.516). What's still open: sweep the window's *width*
+  (this study picked one four-week-before/three-month-after window
+  without testing sensitivity to that specific choice) to check whether
+  H1's correlation keeps drifting as the window tightens further or has
+  already stabilized.
 - Use an event-specific SLOSH/P-Surge advisory run for Ian instead of the
   MOM worst-case composite (Limitation 7), for a genuinely storm-specific
   comparison.
@@ -533,25 +634,34 @@ weight these results can carry:
 ## 10. Conclusion
 
 SurgeExposure's `exposure_score` correlates with real Hurricane Ian NFIP
-claims at a moderate level (*r* = 0.37 for frequency, *r* = 0.52 for
-severity, §6) — enough to say the heuristic is not meaningless, not enough
-to call it validated. The more useful finding was not the correlation
-strength but its shape: the storm-surge signal this study actually measured
-(the active-flood term was inert throughout, §6) tracks claims reasonably
-within the surge zone it models, and says almost nothing about the roughly
-third of Lee County's claims that came from inland, rainfall-driven
-flooding outside that zone. The honest fix implied by this report is not
-tuning the existing 60/40 weighting (§2.3) but two more specific things:
-giving the active-flood term a historical data source so it can contribute
-at all in a study like this one, and confirming or extending its hazard
-coverage to rainfall-driven flooding once it does (§9). This report's
-central methodological point
-survives the specific numbers either way: a small, fully public validation
-— published data, published code, published bugs (§5.3) and all — is more
-useful than a larger, asserted-but-unverifiable one, precisely because a
-reader can find the same third-of-claims pattern in
-[`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv) that this
-report found, and does not have to take the report's word for it.
+claims at a moderate level — *r* = 0.52 for severity, robust to a
+date-window sensitivity check (§6.1); *r* = 0.37 for frequency,
+unrestricted, dropping to *r* = 0.25 once claims are restricted to Ian's
+own window (§6.1) — enough to say the heuristic is not meaningless, not
+enough to call it validated, and enough to say plainly that its two
+headline correlations do not deserve equal trust. The more useful finding
+was not the correlation strength but its shape, in two separate ways: the
+storm-surge signal this study actually measured (the active-flood term was
+inert throughout, §6) tracks claims reasonably within the surge zone it
+models and says almost nothing about the roughly third of Lee County's
+claims that came from inland, rainfall-driven flooding outside that zone;
+and separately, a large share of what looked like frequency signal in the
+unrestricted number was multi-year claims noise rather than anything
+`exposure_score` actually predicts (§6.1). The honest fix implied by this
+report is not tuning the existing 60/40 weighting (§2.3) but three more
+specific things: giving the active-flood term a historical data source so
+it can contribute at all in a study like this one, confirming or extending
+its hazard coverage to rainfall-driven flooding once it does (§9), and
+reporting the frequency correlation as a window-dependent range (0.25–0.37)
+rather than a single flattering number going forward. This report's
+central methodological point survives the specific numbers either way: a
+small, fully public validation — published data, published code, published
+bugs (§5.3, §5.4) and all — is more useful than a larger,
+asserted-but-unverifiable one, precisely because a reader can find the same
+third-of-claims pattern and the same date-window sensitivity in
+[`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv) and
+[`paper/data/lee_county_grid_ian_window.csv`](data/lee_county_grid_ian_window.csv)
+that this report found, and does not have to take the report's word for it.
 
 ## References
 
