@@ -14,6 +14,23 @@ trust is the more useful result of the two — full validation study,
 literature review, and two honestly-reported methodological bugs found
 along the way: **[paper/paper.md](paper/paper.md)**.
 
+## Related work
+
+This pipeline's real building/exposure data and validation findings became
+the foundation for two follow-on Databricks projects:
+- **[surge-exposure-agent](https://github.com/DBishal13/surge-exposure-agent)** —
+  turns this data into a conversational Agent Bricks agent with a real
+  write action (flagging buildings for inspection) and an honest,
+  validation-study-grounded sense of its own trustworthiness.
+- **[surge-exposure-ml](https://github.com/DBishal13/surge-exposure-ml)** —
+  re-validates this project's own methodology at 8x the geographic scope
+  (140k+ real FEMA claims, not just Lee County) and trains an actual model
+  to check honestly whether it beats this hand-picked heuristic.
+
+Both are part of a broader
+[Databricks AI portfolio](https://github.com/DBishal13/databricks-ai-capstone)
+covering Agent Bricks, MLflow, Unity Catalog, and Vector Search.
+
 ## Description
 A reproducible pipeline that ingests NOAA National Storm Surge Risk
 (MEOW/MOM) layers and NOAA NWPS flood-inundation polygons, overlays them against
