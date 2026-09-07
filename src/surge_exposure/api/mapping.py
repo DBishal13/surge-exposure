@@ -21,7 +21,12 @@ def build_exposure_map(gdf: gpd.GeoDataFrame) -> folium.Map:
         return folium.Map(location=[25.75, -80.15], zoom_start=12)
 
     centroid = gdf.geometry.union_all().centroid
-    fmap = folium.Map(location=[centroid.y, centroid.x], zoom_start=14, tiles="cartodbpositron")
+    fmap = folium.Map(
+        location=[centroid.y, centroid.x],
+        zoom_start=14,
+        tiles="https://services.arcgisonline.com/arcgis/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        attr="Tiles &copy; Esri",
+    )
 
     for _, row in gdf.iterrows():
         color = CATEGORY_COLORS.get(row.get("exposure_category", "none"), "#999999")
