@@ -25,7 +25,11 @@ the foundation for two follow-on Databricks projects:
 - **[surge-exposure-ml](https://github.com/DBishal13/surge-exposure-ml)** —
   re-validates this project's own methodology at 8x the geographic scope
   (140k+ real FEMA claims, not just Lee County) and trains an actual model
-  to check honestly whether it beats this hand-picked heuristic.
+  to check honestly whether it beats this hand-picked heuristic. The
+  severity correlation held up and *strengthened* outside Lee County
+  (r=0.52 → 0.71–0.81); the frequency one didn't, and got sign-unstable.
+  Along the way it found a named, quantified instance of this paper's own
+  abstract limitation — see [paper/paper.md §9.1](paper/paper.md#91-update-september-2026-multi-region-replication).
 
 Both are part of a broader
 [Databricks AI portfolio](https://github.com/DBishal13/databricks-ai-capstone)

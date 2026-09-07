@@ -611,9 +611,13 @@ weight these results can carry:
 - **Add or confirm riverine/pluvial coverage** once the term above is
   fixed — §7 argues this, not reweighting `SURGE_WEIGHT`/`FLOOD_WEIGHT`, is
   what §6's inland-claims pattern actually calls for.
-- Replicate across multiple counties/coastlines and multiple storm events
-  before treating any correlation as informative for reweighting
-  `SURGE_WEIGHT`/`FLOOD_WEIGHT` in `pipeline.py`.
+- ~~Replicate across multiple counties/coastlines~~ — partially done (§9.1):
+  a companion project re-ran this exact methodology across all 8 regions
+  it covers, using this pipeline's own precomputed scores. H2 held up and
+  strengthened; H1 did not. Replication across multiple *storm events*
+  (as opposed to multiple *places*) remains open, and no reweighting of
+  `SURGE_WEIGHT`/`FLOOD_WEIGHT` in `pipeline.py` has been done on the
+  strength of this result.
 - ~~Restrict claims to a tight post-Ian date window~~ — done (§5.4, §6.1):
   H1 is window-sensitive (r=0.37 unrestricted vs. 0.25 restricted), H2
   is not (0.52 vs. 0.516). What's still open: sweep the window's *width*
@@ -630,6 +634,61 @@ weight these results can carry:
 - If a future collaboration secures access to non-redacted (building-level)
   claims coordinates under a FEMA data-use agreement, redo this as an
   actual per-building join instead of a grid-cell ecological correlation.
+
+### 9.1 Update (September 2026): multi-region replication
+
+A companion project, [surge-exposure-ml](https://github.com/DBishal13/surge-exposure-ml),
+independently fetched real NFIP claims for all 8 regions this pipeline's
+public demo dataset covers (140,732 claims total, vs. this study's 48,105
+for Lee County alone) and re-ran this paper's exact grid-cell methodology
+(§5) against them — the same 0.1° snap-to-grid, the same per-cell
+aggregation, the same Pearson correlation — without re-scoring a single
+building: it reused this pipeline's own precomputed `exposure_score`
+values for the 7,717 buildings in its demo dataset exactly as this project
+produced them.
+
+**H2 (severity) held up, and strengthened, outside Lee County**: r = 0.52
+(Lee County) → r = 0.711 across all 13 cells in the wider dataset, rising
+to r = 0.805 with one outlier cell excluded. A heuristic that only worked
+by Lee-County-specific coincidence would be expected to weaken outside it,
+not strengthen — this is evidence against that reading.
+
+**H1 (frequency) did not hold up — it became sign-unstable**: r = -0.113
+across all 13 cells, flipping to r = +0.169 with a single cell excluded.
+Consistent with, not contradicting, this paper's own §6.1 finding that
+H1's headline number was partly a date-window artifact: at wider
+geographic scope, the same fragility shows up as sign instability rather
+than a smaller magnitude.
+
+**A concrete instance of this paper's own abstract limitation**: one
+cell — French Quarter, New Orleans — scores `exposure_score = 0.000`
+(the model's flat claim of *zero* storm-surge exposure) while carrying
+7,931 real NFIP claims, the single highest claim count of any cell in the
+8-region dataset, averaging $64,576 in building-only payouts per claim.
+This is exactly the "~30% of claims from inland, rainfall-driven flooding
+a surge-only signal was never going to see" problem named in this paper's
+abstract (§1.1) — no longer an abstract caveat, but a specific, named,
+quantified place.
+
+A follow-up check in that project asked whether a trained model (rather
+than this heuristic) would catch that blind spot in advance, using honest
+out-of-fold cross-validation rather than a model fit on the same data it's
+evaluated against. It did, partially — but not uniformly: at least one
+region (Clearwater Beach) is a case where the simple heuristic beats a
+properly cross-validated learned model. The resulting design principle —
+report both, and treat large disagreement between them as the signal
+worth surfacing, rather than picking a permanent winner — is now live in
+[surge-exposure-agent](https://github.com/DBishal13/surge-exposure-agent)'s
+`compare_risk_estimates` tool. Full write-up:
+[surge-exposure-ml/analysis/ANALYSIS.md](https://github.com/DBishal13/surge-exposure-ml/blob/main/analysis/ANALYSIS.md).
+
+One scope note this paper's own standards call for stating plainly: this
+replication reused precomputed scores for a fixed, small demo dataset
+rather than re-running `run_exposure_pipeline` freshly per claim cell the
+way §5's own Lee County methodology did — so it extends this study's
+geographic *breadth*, not its per-cell building *density*, and inherits
+whatever selection effects exist in how those 8 regions' demo buildings
+were originally sampled.
 
 ## 10. Conclusion
 
