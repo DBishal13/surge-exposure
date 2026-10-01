@@ -117,7 +117,17 @@ def _score_buildings_for_cell(grid_lat: float, grid_lon: float) -> gpd.GeoDataFr
     bbox = (grid_lon - half, grid_lat - half, grid_lon + half, grid_lat + half)
     # sample="random": a capped first-N scan is spatially biased within the
     # cell, the same failure §5.3 documents at county scale.
-    return run_exposure_pipeline(bbox, building_limit=PER_CELL_BUILDING_LIMIT, building_sample="random")
+    # The random sample is seeded, so a cached cell is identical to a fresh one;
+    # caching lets the --ian-window run reuse the unrestricted run's buildings.
+    cache = REPO_ROOT / "data" / "cache" / "grid_cells" / f"{grid_lat:.1f}_{grid_lon:.1f}.parquet"
+    if cache.exists():
+        return gpd.read_parquet(cache)
+    scored = run_exposure_pipeline(bbox, building_limit=PER_CELL_BUILDING_LIMIT, building_sample="random",
+                                   live_flood=False)
+    if not scored.empty:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        scored.to_parquet(cache)
+    return scored
 
 
 def _restrict_to_ian_window(claims: pd.DataFrame) -> pd.DataFrame:

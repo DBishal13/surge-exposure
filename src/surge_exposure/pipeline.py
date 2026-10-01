@@ -42,20 +42,24 @@ def run_exposure_pipeline(
     building_limit: int | None = None,
     raster_path: Path | None = None,
     building_sample: str = "first",
+    live_flood: bool = True,
 ) -> gpd.GeoDataFrame:
     """Fetch buildings + hazard layers for bbox and return a GeoDataFrame of
     per-building exposure scores.
 
     building_sample: "first" (fast, for maps) or "random" (spatially unbiased,
-    for anything that averages scores; see overture.limit_clause)."""
+    for anything that averages scores; see overture.limit_clause).
+    live_flood: query NOAA's live NWM inundation feed for the flood term. Set
+    False when scoring a past event: the feed has no historical replay, so
+    today's conditions would only add noise (flood_active is then False)."""
     buildings = overture.get_buildings(bbox, limit=building_limit, sample=building_sample)
     if buildings.empty:
         return buildings
 
     scored = storm_surge.sample_surge_class(buildings, raster_path=raster_path)
 
-    inundation = flood_inundation.get_inundation_extent(bbox)
-    if not inundation.empty:
+    inundation = flood_inundation.get_inundation_extent(bbox) if live_flood else None
+    if inundation is not None and not inundation.empty:
         hit_idx = gpd.sjoin(
             scored, inundation[["geometry"]], how="left", predicate="intersects"
         )["index_right"].notna()

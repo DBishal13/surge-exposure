@@ -7,6 +7,8 @@ NWPS — a standard ArcGIS REST FeatureServer/MapServer, queried by bbox.
 
 from __future__ import annotations
 
+import time
+
 import geopandas as gpd
 import httpx
 
@@ -15,7 +17,8 @@ from surge_exposure.config import settings
 BBox = tuple[float, float, float, float]
 
 
-def get_inundation_extent(bbox: BBox, layer: int = 0, timeout: float = 60.0) -> gpd.GeoDataFrame:
+def get_inundation_extent(bbox: BBox, layer: int = 0, timeout: float = 60.0,
+                          retries: int = 3) -> gpd.GeoDataFrame:
     """Return flood inundation extent polygons intersecting bbox.
 
     bbox: (min_lon, min_lat, max_lon, max_lat) in EPSG:4326.
@@ -34,7 +37,12 @@ def get_inundation_extent(bbox: BBox, layer: int = 0, timeout: float = 60.0) -> 
         "returnGeometry": "true",
         "f": "geojson",
     }
-    resp = httpx.get(url, params=params, timeout=timeout)
+    # The service intermittently returns 5xx under load; retry with backoff.
+    for attempt in range(retries + 1):
+        resp = httpx.get(url, params=params, timeout=timeout)
+        if resp.status_code < 500 or attempt == retries:
+            break
+        time.sleep(2 ** attempt)
     resp.raise_for_status()
     geojson = resp.json()
 
