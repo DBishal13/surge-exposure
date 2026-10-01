@@ -41,10 +41,14 @@ def run_exposure_pipeline(
     bbox: BBox,
     building_limit: int | None = None,
     raster_path: Path | None = None,
+    building_sample: str = "first",
 ) -> gpd.GeoDataFrame:
     """Fetch buildings + hazard layers for bbox and return a GeoDataFrame of
-    per-building exposure scores."""
-    buildings = overture.get_buildings(bbox, limit=building_limit)
+    per-building exposure scores.
+
+    building_sample: "first" (fast, for maps) or "random" (spatially unbiased,
+    for anything that averages scores; see overture.limit_clause)."""
+    buildings = overture.get_buildings(bbox, limit=building_limit, sample=building_sample)
     if buildings.empty:
         return buildings
 

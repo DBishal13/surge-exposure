@@ -115,7 +115,9 @@ def _claim_cells_in_bounds(claims: pd.DataFrame) -> list[tuple[float, float]]:
 def _score_buildings_for_cell(grid_lat: float, grid_lon: float) -> gpd.GeoDataFrame:
     half = GRID_STEP / 2
     bbox = (grid_lon - half, grid_lat - half, grid_lon + half, grid_lat + half)
-    return run_exposure_pipeline(bbox, building_limit=PER_CELL_BUILDING_LIMIT)
+    # sample="random": a capped first-N scan is spatially biased within the
+    # cell, the same failure §5.3 documents at county scale.
+    return run_exposure_pipeline(bbox, building_limit=PER_CELL_BUILDING_LIMIT, building_sample="random")
 
 
 def _restrict_to_ian_window(claims: pd.DataFrame) -> pd.DataFrame:

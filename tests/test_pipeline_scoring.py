@@ -18,7 +18,7 @@ def test_run_exposure_pipeline_scores_and_categorizes(monkeypatch):
         crs="EPSG:4326",
     )
 
-    def fake_get_buildings(bbox, limit=None):
+    def fake_get_buildings(bbox, limit=None, sample="first"):
         return buildings.copy()
 
     def fake_sample_surge_class(gdf, raster_path=None):

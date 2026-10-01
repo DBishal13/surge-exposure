@@ -291,17 +291,25 @@ checked, which is exactly what §4-§6 do.
 
 ### 3.5 Catastrophe Model Validation Methodology
 
-Professional catastrophe models are themselves benchmarked against NFIP
-claims: Dusseau, Zobel & Schwalm, comparing seven commercial/federal flood
-catastrophe models' loss estimates against NFIP claims (1978-2024,
-normalized to 2022 exposure), found three NFIP-used models landed within 4%
-of historical losses nationally, while others diverged by 2x or more
-regionally ([*Journal of Catastrophe Risk and Resilience* 4(1)](https://journalofcrr.com/research/04-01-dusseau-et-al/)).
-That validation happens at state/national scale with normalized,
-multi-decade data. §4-§6 attempt a structurally similar idea — model score
-vs. real claims — at a scale several orders of magnitude smaller (one
-county, one event, tens of grid cells), which is precisely why its results
-can only be directional (§8).
+Public, reproducible comparisons of flood loss models against observed
+claims are scarce. The most prominent recent one, a comparison of seven
+commercial and federal flood catastrophe models against NFIP claims by
+Dusseau, Zobel & Schwalm in the *Journal of Catastrophe Risk and
+Resilience* 4(1), was **retracted by its authors on 16 September 2026**
+([retraction note](https://journalofcrr.com/Comment/Retraction-Note-04-08-Dusseau-et-al/)).
+They cite a data error in one table and a methodological flaw: the
+comparison "did not adequately account for the low insurance take-up rate
+and the resulting risk selection bias within the NFIP dataset." Its findings
+are not relied on here. The stated flaw applies to any study that treats
+NFIP claims as ground truth, this one included: claims only exist where
+someone bought a policy, and take-up varies across space. §5 therefore
+normalizes claim counts by policies in force, and §8 discusses the
+selection bias that normalization cannot remove. [TODO: add any surviving
+peer-reviewed comparison of loss models against claims.] The scarcity of
+public, checkable validation is part of the motivation for this report:
+§4-§6 compare a model score against real claims at a much smaller scale
+(one county, one event), with every input, script and intermediate table
+public.
 
 ### 3.6 Spatial Aggregation and the Modifiable Areal Unit Problem
 
@@ -726,7 +734,8 @@ that this report found, and does not have to take the report's word for it.
 
 - Dusseau, D., Zobel, Z., & Schwalm, C.R. (2026). Validation and Comparison
   of U.S. Loss Estimates from Catastrophe Flood Models. *Journal of
-  Catastrophe Risk and Resilience*, 4(1).
+  Catastrophe Risk and Resilience*, 4(1). **Retracted 16 September 2026**;
+  cited only to note the retraction (§3.5).
   https://journalofcrr.com/research/04-01-dusseau-et-al/
 - FEMA. National Flood Insurance Program Risk Rating 2.0: Methodology and
   Data Sources.

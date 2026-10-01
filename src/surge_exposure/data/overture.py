@@ -32,10 +32,34 @@ def _latest_release(con: duckdb.DuckDBPyConnection) -> str:
     ).fetchone()[0]
 
 
-def get_buildings(bbox: BBox, limit: int | None = None) -> gpd.GeoDataFrame:
+def limit_clause(limit: int | None, sample: str = "first", seed: int = 42) -> str:
+    """SQL that caps the number of buildings returned.
+
+    sample="first" keeps whatever rows DuckDB's scan reaches first. That is fast,
+    and fine for drawing a map, but the scan order over Overture's partitioned
+    GeoParquet is not spatially uniform, so the rows cluster in part of the
+    bbox (see paper §5.3). sample="random" orders rows by a seeded hash of the
+    building id before limiting: a deterministic, spatially unbiased sample, at
+    the cost of reading every matching row first. Use it for anything that
+    averages over the sample, such as the validation study.
+    """
+    if not limit:
+        return ""
+    if sample == "first":
+        return f"LIMIT {int(limit)}"
+    if sample == "random":
+        return f"ORDER BY hash(id || '{int(seed)}') LIMIT {int(limit)}"
+    raise ValueError(f"sample must be 'first' or 'random', not {sample!r}")
+
+
+def get_buildings(
+    bbox: BBox, limit: int | None = None, sample: str = "first", seed: int = 42
+) -> gpd.GeoDataFrame:
     """Return Overture building footprints intersecting bbox as a GeoDataFrame.
 
     bbox: (min_lon, min_lat, max_lon, max_lat) in EPSG:4326.
+    limit / sample / seed: optional cap on the number of buildings; see
+    limit_clause for why sample="random" matters for statistics.
     """
     min_lon, min_lat, max_lon, max_lat = bbox
     con = _connect()
@@ -57,7 +81,7 @@ def get_buildings(bbox: BBox, limit: int | None = None) -> gpd.GeoDataFrame:
         )
         WHERE bbox.xmin <= {max_lon} AND bbox.xmax >= {min_lon}
           AND bbox.ymin <= {max_lat} AND bbox.ymax >= {min_lat}
-        {f"LIMIT {limit}" if limit else ""}
+        {limit_clause(limit, sample, seed)}
     """
     df = con.execute(query).fetch_df()
     con.close()
