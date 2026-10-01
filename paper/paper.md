@@ -564,6 +564,11 @@ Full per-cell data: [`paper/data/lee_county_grid_ian_window.csv`](data/lee_count
 
 **6.2 Unit-level results (main results, §5.5).**
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/units-chart-dark.png">
+  <img src="figures/units-chart-light.png" alt="Six scatter plots of mean SLOSH MOM surge depth against Hurricane Ian claim rate (top row) and mean damage ratio (bottom row) at block-group, tract and 0.1-degree grid scale. Claim rate rises with depth at every scale (r 0.64 to 0.71); damage ratio rises at block group and tract (r 0.43, 0.46) but not on the grid (r 0.12).">
+</picture>
+
 | | Block group | Tract | 0.1° grid |
 |---|---|---|---|
 | Units used / total | 457 / 578 | 200 / 222 | 34 / 39 |
