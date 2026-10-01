@@ -29,9 +29,20 @@ CLASS_TO_FEET = {i: i - 0.5 for i in range(1, 22)}
 CLASS_TO_FEET[0] = 0.0
 
 
+def select_category_member(names: list[str], category: int) -> str:
+    """Pick the high-tide MOM GeoTIFF for one hurricane category (1-5) from the
+    national zip, which holds one raster per category. Earlier versions took
+    the first .tif listed, which happened to be Category 1."""
+    suffix = f"category{category}_mom_inundation_high.tif"
+    matches = [n for n in names if n.lower().endswith(suffix)]
+    if len(matches) != 1:
+        raise RuntimeError(f"expected one {suffix} in storm surge zip, found {len(matches)}")
+    return matches[0]
+
+
 def ensure_storm_surge_raster(dest: Path | None = None) -> Path:
-    """Download and unzip the SLOSH MOM GeoTIFF into data/raw/ if not already
-    cached. This is a multi-GB file (~1.6GB zipped) — only fetched once, and
+    """Download and unzip the SLOSH MOM GeoTIFF for settings.storm_surge_category
+    (high tide) into data/raw/ if not already cached. This is a multi-GB file (~1.6GB zipped) — only fetched once, and
     streamed to disk rather than buffered in memory."""
     dest = dest or settings.storm_surge_geotiff
     if dest.exists():
@@ -49,10 +60,8 @@ def ensure_storm_surge_raster(dest: Path | None = None) -> Path:
                 f.write(chunk)
 
     with zipfile.ZipFile(zip_path) as zf:
-        tif_names = [n for n in zf.namelist() if n.lower().endswith(".tif")]
-        if not tif_names:
-            raise RuntimeError("No .tif found in storm surge zip archive")
-        with zf.open(tif_names[0]) as src, open(dest, "wb") as out:
+        member = select_category_member(zf.namelist(), settings.storm_surge_category)
+        with zf.open(member) as src, open(dest, "wb") as out:
             shutil.copyfileobj(src, out)
 
     zip_path.unlink()

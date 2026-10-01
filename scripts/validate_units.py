@@ -208,19 +208,18 @@ def correlate(df: pd.DataFrame, y: str, blocks: str, n_filter: pd.Series) -> dic
 
 # ---------------------------------------------------------------- main
 
-def main() -> None:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--refresh", action="store_true", help="re-download cached inputs")
-    args = ap.parse_args()
-
+def prepare(refresh: bool = False):
+    """Load and join every input: buildings (with surge depth and census units),
+    Ian claims and policies in force, all keyed by block group, tract and grid.
+    Returns (buildings, claims, policies, coverage)."""
     bg20, crosswalk = load_block_groups()
     valid = set(bg20["GEOID"])
 
-    buildings = load_buildings(args.refresh)
+    buildings = load_buildings(refresh)
     buildings = gpd.sjoin(buildings, bg20.rename(columns={"GEOID": "block_group"}), predicate="within", how="inner")
     buildings["lon"], buildings["lat"] = buildings.geometry.x, buildings.geometry.y
 
-    claims = load_claims(args.refresh)
+    claims = load_claims(refresh)
     claims["ian"] = claims["eventDesignationNumber"].eq(IAN_EDN)
     n_all = len(claims)
     claims = claims[claims["ian"]].copy()
@@ -231,7 +230,7 @@ def main() -> None:
                         + pd.to_numeric(claims["amountPaidOnContentsClaim"], errors="coerce").fillna(0))
     claims["block_group"] = to_2020(claims["censusGeoid"], crosswalk, valid)
 
-    policies = load_policies(args.refresh)
+    policies = load_policies(refresh)
     policies["block_group"] = to_2020(policies["censusBlockGroupFips"], crosswalk, valid)
 
     coverage = {
@@ -253,16 +252,29 @@ def main() -> None:
     for frame, lat, lon in ((buildings, "lat", "lon"), (claims, "latitude", "longitude"),
                             (policies, "latitude", "longitude")):
         frame["grid"] = frame[lat].round(1).astype(str) + "," + frame[lon].round(1).astype(str)
+    return buildings, claims, policies, coverage
 
+
+def unit_table(buildings, claims, policies, unit: str) -> pd.DataFrame:
+    """Per-unit table, plus the spatial block each unit falls in for the bootstrap:
+    the 0.1-degree cell of its centre (a coarser 0.2-degree cell for the grid unit)."""
+    df = aggregate(buildings, claims.dropna(subset=[unit]), policies.dropna(subset=[unit]), unit)
+    step = 0.2 if unit == "grid" else 0.1
+    df["block"] = ((df["lat"] / step).round().astype(int).astype(str) + "," +
+                   (df["lon"] / step).round().astype(int).astype(str))
+    return df
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--refresh", action="store_true", help="re-download cached inputs")
+    args = ap.parse_args()
+
+    buildings, claims, policies, coverage = prepare(args.refresh)
     results = {"coverage": coverage, "units": {}}
     OUT.mkdir(parents=True, exist_ok=True)
     for unit in ("block_group", "tract", "grid"):
-        df = aggregate(buildings, claims.dropna(subset=[unit]), policies.dropna(subset=[unit]), unit)
-        # Spatial blocks for the bootstrap: the 0.1-degree cell each unit's centre falls in
-        # (a coarser 0.2-degree cell for the grid unit itself).
-        step = 0.2 if unit == "grid" else 0.1
-        df["block"] = ((df["lat"] / step).round().astype(int).astype(str) + "," +
-                       (df["lon"] / step).round().astype(int).astype(str))
+        df = unit_table(buildings, claims, policies, unit)
         df.to_csv(OUT / f"{unit}.csv", index=False)
 
         enough = (df["policies"] >= MIN_POLICIES) & (df["buildings"] >= MIN_BUILDINGS)

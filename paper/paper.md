@@ -18,7 +18,8 @@ proxies, but they are rarely checked in public against what storms actually
 did. We test the most widely used of them, NOAA's SLOSH Maximum of Maximums
 (MOM) worst-case inundation envelope, against FEMA National Flood Insurance
 Program (NFIP) claims from Hurricane Ian (2022) in Lee County, Florida. The
-open SurgeExposure pipeline samples MOM depth at the centroid of all
+open SurgeExposure pipeline samples the Category 1, high-tide MOM depth at
+the centroid of all
 366,764 Overture building footprints in the county. We aggregate to 2020
 census block groups (457 usable units), tracts (200) and a 0.1° grid (34).
 Claims attributed to Ian by FEMA's event designation (28,616) are divided by
@@ -39,8 +40,15 @@ relationship is much weaker outside the Special Flood Hazard Area, where
 insurance is voluntary (block-group ρ = 0.32, vs 0.73 inside). Regression
 residuals remain spatially autocorrelated (Moran's *I* ≈ 0.4). Because
 insured buildings are a self-selected sample, these are statements about
-insured losses, not about all damage. All data, code and per-unit tables
-are public.
+insured losses, not about all damage. Ian made landfall as a Category 4,
+so we repeat the analysis with every MOM category and add 239 USGS
+high-water marks. The Category 1 envelope matches Ian's observed water
+best (mean bias +0.3 ft, RMSE 2.1 ft), and it also matches the losses
+best. The Category 4 envelope overpredicts observed water by 13 ft, and
+its correlation with the damage ratio falls to 0.27. A category's MOM is
+a worst case over hundreds of hypothetical storms, so matching it to the
+real storm's category overstates surge. All data, code and per-unit
+tables are public.
 
 ## 1. Introduction
 
@@ -133,7 +141,12 @@ Leaflet frontend (live) + static GitHub Pages showcase (8 precomputed regions)
 - **Storm-surge depth — NOAA SLOSH MOM.** The National Hurricane Center's
   "Maximum of MEOWs" composite storm-surge raster (Texas-to-Maine, 8-bit
   class resolution, ~1.6 GB zipped) is downloaded once and cached locally
-  (`data/storm_surge.py`), then sampled at each building's centroid. MOM is
+  (`data/storm_surge.py`), then sampled at each building's centroid. The
+  archive holds one high-tide raster per hurricane category (1–5). The
+  pipeline uses **Category 1** (`settings.storm_surge_category`). Until
+  October 2026 this was not a setting: the download step took the first
+  GeoTIFF in the archive, which a CRC check confirms is Category 1. §6.3
+  compares all five. MOM is
   a *worst-case envelope across many modeled hypothetical storms*, not a
   reconstruction of any specific real event — a distinction that matters
   for how §6's results should be read (a claim asking "did this exact
@@ -426,8 +439,8 @@ replaces the per-cell sampling of §5.3 with full coverage, and the counts
 and dollars of §5.1 with rates and ratios. The steps are as follows.
 
 - **Buildings.** All 366,764 Overture footprints inside Lee County's 2020
-  block groups are reduced to centroids, and MOM depth is sampled at each
-  centroid. Depth is the midpoint of NOAA's 1-ft class bin. Outside MOM
+  block groups are reduced to centroids, and Category 1 high-tide MOM depth (§2.2,
+  §6.3) is sampled at each centroid. Depth is the midpoint of NOAA's 1-ft class bin. Outside MOM
   coverage, depth is 0. Each unit's exposure is the mean depth over its
   buildings, and the share of buildings with depth above 0 is recorded
   alongside it.
@@ -636,6 +649,69 @@ rainfall or the gap between MOM and Ian's actual surge, explains part of
 the variance. The bootstrap CIs account for clustering in the
 *uncertainty*. They do not remove it from the *estimate*.
 
+**6.3 Which MOM category? A check against USGS high-water marks.** NOAA's
+national MOM download holds one high-tide raster per hurricane category.
+Every number above uses Category 1 (§2.2). That was not chosen on purpose,
+and Ian made landfall as a Category 4. `scripts/validate_categories.py`
+therefore repeats §6.2 with each category. It also adds a check against
+observed water that does not depend on insurance data: the 239 coastal
+high-water marks that USGS surveyed in Lee County after Ian (STN event
+325). All are of fair quality or better (±0.20 ft or less), and each
+records the water's height above ground.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="figures/categories-chart-dark.png">
+  <img src="figures/categories-chart-light.png" alt="Left: observed high-water-mark depth against MOM depth for Category 1 (close to the 1:1 line) and Category 4 (13 ft too deep on average). Right: block-group correlation of MOM depth with claim rate and damage ratio by category, both declining from Category 1 or 2 to Category 5.">
+</picture>
+
+| MOM category | Bias at marks (ft) | RMSE (ft) | *r* at marks | Marks within 1 ft | Buildings wet | Claim rate *r* [95% CI] | Damage ratio *r* [95% CI] |
+|---|---|---|---|---|---|---|---|
+| **1** | **+0.3** | **2.1** | **0.61** | **42%** | 23% | 0.64 [0.52, 0.77] | **0.43** [0.23, 0.55] |
+| 2 | +4.2 | 4.9 | 0.49 | 8% | 43% | **0.67** [0.57, 0.76] | 0.35 [0.12, 0.54] |
+| 3 | +7.7 | 8.2 | 0.42 | 0% | 62% | 0.61 [0.52, 0.70] | 0.31 [0.07, 0.52] |
+| 4 (Ian) | +13.1 | 13.6 | 0.24 | 0% | 80% | 0.53 [0.45, 0.62] | 0.27 [0.06, 0.49] |
+| 5 | +16.0 | 16.4 | −0.02 | 0% | 88% | 0.47 [0.39, 0.56] | 0.14 [−0.03, 0.37] |
+
+*Bias, RMSE, r and "within 1 ft" compare MOM depth with observed height
+above ground at the 239 marks. The claim and damage columns are
+block-group correlations, as in §6.2 (n = 457 and 209).*
+
+**Category 1 is the closest match to Ian on almost every measure.** At the
+marks, its depth is on average only 0.3 ft above observed water (observed
+mean 3.7 ft, MOM mean 4.0 ft), and 42% of marks are within 1 ft. Each
+higher category overpredicts by a further 4–16 ft, and also tracks the
+*pattern* of observed water less well (*r* 0.61 falling to −0.02).
+
+The loss data agree.
+- The damage-ratio correlation falls steadily from 0.43 (Category 1) to
+  0.14 (Category 5).
+- The claim-rate correlation is about the same for Categories 1 and 2
+  (0.64 and 0.67, with overlapping CIs) and falls from Category 3 upward.
+- The claim-rate relationship outside the SFHA stays weak in every
+  category (ρ 0.32–0.37).
+
+**Why a lower-category envelope fits a stronger storm.** A MOM is the
+cell-by-cell maximum over hundreds of hypothetical storms of one category,
+with different tracks, headings, forward speeds and landfall points. It
+describes the worst case for every location at once, which no single storm
+produces. Ian was one track. The Category 4 envelope assumes a Category 4
+storm took the worst track for each part of the coast. It is therefore
+13 ft too deep on average, and wet at 80% of the county's buildings. That
+erases much of the contrast between flooded and dry neighbourhoods that the
+claims respond to. In Lee County, the Category 1 envelope was the closest
+stand-in for what Ian actually did.
+
+**Caveats.**
+- The marks are coastal and cover only part of the county.
+- Surveyors can only find marks that survive. Water was deepest where
+  structures were destroyed, and marks are least likely to survive
+  there, so the observed means may understate peak water.
+- This is one storm on one coastline. "A Category 1 MOM fits a Category 4
+  storm" should not be generalized without other events.
+- Picking a category after seeing which one fits best is itself a choice
+  made from the data. The §6.2 analysis was fixed (as Category 1) before
+  this comparison, and all five categories are reported here.
+
 ## 7. Discussion
 
 **MOM is a usable proxy for where insured buildings will flood, and a
@@ -647,6 +723,17 @@ appears only at fine scale. This matches Wing et al.'s finding that depth
 alone predicts loss magnitude poorly (§3.4). The rating of a building's
 damage depends on elevation, construction and actual water depth, and none
 of these is in a worst-case envelope.
+
+**Matching the envelope to the storm's category would have been a mistake.**
+The obvious way to use MOM for a real storm is to pick the raster for that
+storm's category. For Ian that is Category 4, and it is the second-worst
+choice of the five, both against observed water and against losses (§6.3).
+A MOM answers "how bad could it get here" for a category. It does not
+answer "how bad did it get" for a given storm of that category. Users who
+need event-level depth should use an event-specific product (P-Surge, or
+a hindcast). Users who only have MOM should treat a lower category as the
+more realistic proxy, and check that choice against high-water marks
+where they exist.
 
 **Scale and normalization did more than refine the original analysis;
 they reversed it.** On a 37-cell grid with raw counts and dollar payouts,
@@ -720,11 +807,13 @@ The following bound how much weight these results can carry:
 7. **No control for building value, age, or elevation.** Wing et al. (2020,
    §3.4) found these materially affect loss given depth. `exposure_score`
    doesn't model them, and neither does this validation.
-8. **SLOSH MOM is a worst-case envelope, not an Ian-specific reconstruction**
-   (§2.2). The surge input to `exposure_score` was never intended to
-   reproduce this specific storm's actual water levels — a genuinely
-   Ian-specific validation would need an event-specific SLOSH/P-Surge run,
-   which is future work (§9), not what this study used.
+8. **SLOSH MOM is a worst-case envelope, not an Ian-specific reconstruction.**
+   §6.3 quantifies this with USGS high-water marks. The Category 1
+   envelope has small mean bias but RMSE 2.1 ft, and the higher categories
+   overpredict by 4–16 ft. Even the best category misses individual marks
+   by about 2 ft. A genuinely Ian-specific validation would need an
+   event-specific SLOSH/P-Surge run or a hindcast, which is future work
+   (§9), not what this study used.
 9. **Take-up and damage-ratio fields are imperfect.** Building footprints
    are not dwelling units, so the take-up proxy is distorted where condo
    policies are common. `buildingPropertyValue` is missing or zero for
@@ -741,9 +830,14 @@ The following bound how much weight these results can carry:
 
 - ~~Census-unit analysis with policy normalization and damage ratios~~ —
   done (§5.5, §6.2).
-- **Compare MOM with observed Ian surge.** Match USGS high-water marks for
-  Ian (STN Flood Event Viewer) to units, to separate "MOM differs from
-  Ian" from "depth predicts losses poorly".
+- ~~Compare MOM with observed Ian surge~~ — done at the marks
+  themselves (§6.3). Still open: interpolate the marks' water-surface
+  elevations, minus a ground DEM (USGS 3DEP), into an *observed* depth for
+  each building. Then repeat §6.2 with observed instead of modeled depth,
+  to separate "MOM differs from Ian" from "depth predicts losses poorly".
+- **Other storms.** Test whether "a lower-category MOM fits better" holds
+  for other events with dense high-water-mark surveys (e.g. Michael 2018,
+  Helene 2024).
 - **Spatial models.** Fit a spatial error or lag model, or GWR, to the
   block-group data, given the residual Moran's *I* in §6.2.
 - **Use the claims' water-depth fields** once their units are confirmed
@@ -849,8 +943,14 @@ rate correlates with mean MOM depth at ρ ≈ 0.8 at block-group, tract and
 grid scale. It tracks how severe those losses were only moderately
 (*r* ≈ 0.45), and only at fine scale. The relationship is strong inside
 the SFHA and weak outside it, and spatial structure remains in the
-residuals. These numbers come from a public pipeline and public data, with
-the selection limits of insured-loss data stated plainly (§8).
+residuals. Against USGS high-water marks, the Category 1 envelope
+matches Ian's observed water to within 0.3 ft on average, while the
+envelope for Ian's own category (4) is 13 ft too deep and tracks losses
+worse (§6.3). These numbers come from a public pipeline and public data,
+with the selection limits of insured-loss data stated plainly (§8).
+
+For practitioners, the second lesson is that "use the MOM for the
+storm's category" overstates surge for any single real storm.
 
 The main methodological lesson is that the earlier, coarser version of
 this study reached the opposite conclusion about which of frequency and

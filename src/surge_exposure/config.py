@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     nwps_base_url: str = "https://api.water.noaa.gov/nwps/v1"
     nwm_fim_base_url: str = "https://maps.water.noaa.gov/server/rest/services/nwm/ana_inundation_extent/MapServer"
 
+    # NOAA's national MOM zip holds one high-tide raster per hurricane category.
+    # Category 1 is the default: it matched Hurricane Ian's USGS high-water marks
+    # and NFIP claims best of the five (paper §6.3, scripts/validate_categories.py).
+    storm_surge_category: int = 1
     storm_surge_geotiff: Path = Path("data") / "raw" / "US_SLOSH_MOM_Inundation_v4.tif"
     storm_surge_download_url: str = (
         "https://www.nhc.noaa.gov/gis/hazardmaps/US_SLOSH_MOM_Inundation_v4.zip"
