@@ -1,53 +1,46 @@
-# SurgeExposure: An Open, Reproducible Pipeline for Building-Level Storm-Surge Exposure Scoring, with a Validation Study Against Real NFIP Losses
+# How Well Does a Worst-Case Storm-Surge Envelope Track Insured Losses? NOAA SLOSH MOM versus Hurricane Ian NFIP Claims at Block-Group, Tract and Grid Scale
 
-**Status:** informal research note / technical report produced alongside the
-[SurgeExposure](../README.md) open-source project. Not peer-reviewed. The
-system description (§2) documents what is actually implemented and
-verifiable in this repository; the validation study (§4 onward) is a small,
-directional case study — its Limitations section (§8) is not boilerplate,
-it is load-bearing, and should be read before trusting any correlation
-number in §6.
+**Status:** working paper, not peer-reviewed. Produced with the open-source
+[SurgeExposure](../README.md) pipeline, which serves here as the
+measurement instrument, not as the object being validated (§2). The main
+results are the census-unit analysis in §5.5 and §6.2. The original
+0.1°-grid analysis (§5.1–§5.4, §6, §6.1) is kept because several of its
+conclusions reverse at finer scale, and that reversal is itself a finding
+(§7). Read the limitations (§8), especially selection bias, before
+relying on any number here.
 
 ---
 
 ## Abstract
 
-Most publicly visible flood/storm-surge exposure tools are either closed
-commercial systems (First Street Foundation, Fathom Global, FEMA's Risk
-Rating 2.0) whose scoring methodology and validation are disclosed only
-partially, or research prototypes that stop at a demo map without ever
-checking the score against outcomes. This report documents SurgeExposure,
-an open, fully reproducible pipeline that scores building footprints for
-storm-surge and flood exposure using only public data (NOAA SLOSH, NOAA
-NWM, Overture Maps) and a transparent, explainable scoring heuristic, and
-then — the part most comparable tools skip in public — checks that
-heuristic against real losses. Using FEMA's OpenFEMA NFIP claims API, we
-compare SurgeExposure's building-level exposure scores against 48,105 real
-flood insurance claims for Lee County, FL following Hurricane Ian (2022), at
-the 0.1° grid-cell resolution (37 cells) NFIP's privacy rounding permits.
-Mean exposure score correlated moderately with both claim frequency
-(*r* = 0.37) and mean claim severity (*r* = 0.52) across cells — weaker
-than a first, methodologically flawed pass suggested (§5.3). A sensitivity
-check restricting claims to Ian's own date window (dropping 40% of raw
-claims attributable to unrelated flood events over NFIP's 1978–2026
-history, §5.4/§6.1) shows the two hypotheses are not equally trustworthy:
-the severity correlation barely moves (*r* = 0.516) but the frequency
-correlation weakens by a third (*r* = 0.25) — evidence that part of the
-original frequency signal was multi-year claims noise, not something
-`exposure_score` actually predicts. A live-data artifact sharpens the read
-further: the score's active-flood-extent term is a present-conditions feed
-with no historical replay, so it registered nothing for a 2022 storm
-queried in 2026, and every score in this study reduces to its storm-surge
-term alone. That surge signal is concentrated correctly: roughly 30% of
-claims sit in cells with near-zero exposure score, almost all in the
-county's inland east, where Hurricane Ian's damage came from
-rainfall-driven riverine flooding a storm-surge-only signal was never
-going to see. We discuss what a lightweight, explainable, surge-only
-heuristic score can and cannot be trusted to predict, and argue the main
-lesson is scope, not calibration: the score isn't wrong about surge
-exposure, it is silent about a different hazard the same storm also
-produced, and its frequency correlation should be trusted considerably
-less than its severity correlation.
+Public storm-surge hazard layers are widely used as building-level exposure
+proxies, but they are rarely checked in public against what storms actually
+did. We test the most widely used of them, NOAA's SLOSH Maximum of Maximums
+(MOM) worst-case inundation envelope, against FEMA National Flood Insurance
+Program (NFIP) claims from Hurricane Ian (2022) in Lee County, Florida. The
+open SurgeExposure pipeline samples MOM depth at the centroid of all
+366,764 Overture building footprints in the county. We aggregate to 2020
+census block groups (457 usable units), tracts (200) and a 0.1° grid (34).
+Claims attributed to Ian by FEMA's event designation (28,616) are divided by
+the 134,046 NFIP policies in force at landfall. Severity is measured as the
+building damage ratio rather than dollars paid. Mean MOM depth tracks the
+claim rate strongly at every scale (block group: Pearson *r* = 0.64,
+spatial-bootstrap 95% CI 0.52–0.77; Spearman ρ = 0.78). It tracks the
+damage ratio moderately at block-group and tract scale (*r* = 0.43
+[0.23, 0.55] and 0.46 [0.21, 0.62]) but not on the 0.1° grid (*r* = 0.12,
+CI spanning zero). Three conclusions of our earlier grid-only analysis do
+not survive. Frequency looked weak only because raw claim counts mix hazard
+with how many buildings are insured (grid *r* = 0.24 for counts, 0.71 for
+rates). Severity, previously the stronger result, is the scale-sensitive
+one. The share of claims in units with negligible modeled surge falls from
+36% on the grid to 18% at block-group level, so the earlier finding that
+"a third of claims were inland" was partly an aggregation artifact. The
+relationship is much weaker outside the Special Flood Hazard Area, where
+insurance is voluntary (block-group ρ = 0.32, vs 0.73 inside). Regression
+residuals remain spatially autocorrelated (Moran's *I* ≈ 0.4). Because
+insured buildings are a self-selected sample, these are statements about
+insured losses, not about all damage. All data, code and per-unit tables
+are public.
 
 ## 1. Introduction
 
@@ -74,32 +67,28 @@ and checked.
 
 ### 1.2 Contributions
 
-1. **A fully open, live-data exposure-scoring pipeline** (§2): building
-   footprints, storm-surge depth, and active-flood extent, all fetched from
-   public APIs with no paid data, no proprietary model, and a scoring
-   formula that fits in one line of code.
-2. **A validation study** (§4-§7) checking that pipeline's output against
-   real NFIP flood-insurance claims for a real, severe storm-surge event,
-   using only public data end-to-end — including the FEMA claims API client
-   built for this study (`data/nfip.py`).
-3. **A documented methodological failure and fix** (§5.3): an early version
-   of the validation undercounted its own building coverage by a factor of
-   ~7 because of an unordered `LIMIT` query, discovered by inspecting the
-   data rather than trusting the first result. We keep this in the report
-   because catching it changes what the results in §6 can support, and
-   because it is a concrete illustration of why "run the pipeline once and
-   report the number" is not sufficient rigor even for a small study.
-4. **An honest limitations account** (§8) — most importantly, that any
-   result here is an *ecological correlation* at ~0.1° grid resolution, not
-   a building-level finding, because NFIP's public claims data is
-   privacy-rounded and cannot support anything finer.
-5. **A sensitivity check that changes which headline number should be
-   trusted** (§5.4/§6.1): restricting claims to Ian's own date window shows
-   the frequency correlation (H1) is substantially inflated by unrelated
-   multi-year claims noise (r=0.37 → 0.25) while the severity correlation
-   (H2) is not (r=0.52 → 0.516) — a second documented bug (a timezone
-   mismatch, caught the same way as §5.3's) fixed and covered by a
-   regression test along the way.
+1. **A public, end-to-end test of SLOSH MOM as an exposure proxy** (§5.5,
+   §6.2), using real NFIP claims for a severe surge event. Claims are
+   normalized by policies in force and severity by property value, and
+   results are reported at three areal units with spatial-bootstrap
+   confidence intervals.
+2. **Evidence that scale and normalization change the answer** (§6.2,
+   §7). Moving from a 37-cell grid with raw counts and dollar payouts to
+   census units with rates and damage ratios reverses which result looks
+   robust, and shrinks the apparent inland-loss share by half. This tests
+   the Modifiable Areal Unit Problem (§3.6) directly, rather than only
+   citing it as a caveat.
+3. **A stratified look at selection** (§6.2, §8). Results are split by
+   flood-zone status (inside vs outside the SFHA) and by insurance take-up,
+   the bias behind the retraction discussed in §3.5.
+4. **An open instrument** (§2). Building footprints, the surge raster,
+   claims and policies all come from public sources, and one script
+   reproduces every number (`scripts/validate_units.py`).
+5. **Documented failures and fixes** (§5.3, §5.4). These are a spatially
+   biased `LIMIT` sample, a timezone bug, and (§5.5) a county-code mismatch
+   that silently returned zero claims. All were caught by inspecting the
+   data rather than trusting a first result, and each is now covered by a
+   test or an explicit check.
 
 ## 2. System Design: SurgeExposure
 
@@ -313,8 +302,10 @@ public.
 
 ### 3.6 Spatial Aggregation and the Modifiable Areal Unit Problem
 
-Because NFIP claim coordinates are rounded to 0.1° before release, any
-comparison against them is necessarily an *ecological correlation* — a
+NFIP claim coordinates are rounded to 0.1° before release, but claims and
+policies also carry a census block-group code. Any comparison is therefore
+still an *ecological correlation*, but it can be made at block-group,
+tract or grid scale, and §6.2 reports all three. Any such comparison is — a
 relationship between area-aggregated quantities, not individual buildings.
 This is a textbook instance of the Modifiable Areal Unit Problem (MAUP):
 statistical relationships computed over arbitrarily-drawn areal units can
@@ -327,20 +318,25 @@ An ecological correlation is not proof of an individual-level relationship
 
 ## 4. Research Question
 
-> **RQ:** At the 0.1°-grid-cell level, does SurgeExposure's building-level
-> `exposure_score` correlate with real NFIP flood-claim outcomes — claim
-> frequency and mean claim severity — in Lee County, FL following Hurricane
-> Ian?
+> **RQ:** Across areal units in Lee County, FL, does mean SLOSH MOM surge
+> depth at building centroids correlate with Hurricane Ian's insured
+> losses, and does the answer depend on the unit of aggregation?
 
-Two directional hypotheses, tested independently since frequency and
-severity are different questions (§3.4 — depth relates to severity in
-complex, non-monotonic ways, which gives no a priori reason to expect it
-predicts frequency and severity equally well):
+- **H1 (frequency):** mean MOM depth per unit is positively correlated with
+  the Ian *claim rate*, i.e. claims ÷ NFIP policies in force at landfall.
+- **H2 (severity):** mean MOM depth per unit is positively correlated with
+  the mean building *damage ratio*, i.e. damage ÷ property value.
+- **H3 (scale):** the H1 and H2 correlations are similar at block-group,
+  tract and 0.1°-grid scale.
+- **Exploratory:** the H1 relationship inside vs outside the SFHA, and
+  across terciles of insurance take-up.
 
-- **H1:** mean `exposure_score` per grid cell is positively correlated with
-  claim *count* per cell.
-- **H2:** mean `exposure_score` per grid cell is positively correlated with
-  mean claim *payout* per cell.
+The original analysis (§5.1–§5.4, §6, §6.1) tested earlier versions of H1
+and H2. Those used raw claim counts and mean dollar payouts against the
+pipeline's `exposure_score`, on the 0.1° grid only. Because the score's
+flood-extent term was inert (§6), that score equals 0.03 × MOM depth
+(capped at 20 ft). The two analyses therefore measure the same hazard
+input, and differ only in units, normalization and inference.
 
 ## 5. Validation Methodology
 
@@ -425,7 +421,65 @@ would have either crashed obviously (as it did) or, worse, silently
 produced a wrong window if the comparison had failed open instead of
 raising.
 
+**5.5 Unit-level analysis (main analysis).** `scripts/validate_units.py`
+replaces the per-cell sampling of §5.3 with full coverage, and the counts
+and dollars of §5.1 with rates and ratios. The steps are as follows.
+
+- **Buildings.** All 366,764 Overture footprints inside Lee County's 2020
+  block groups are reduced to centroids, and MOM depth is sampled at each
+  centroid. Depth is the midpoint of NOAA's 1-ft class bin. Outside MOM
+  coverage, depth is 0. Each unit's exposure is the mean depth over its
+  buildings, and the share of buildings with depth above 0 is recorded
+  alongside it.
+- **Claims.** OpenFEMA NFIP claims (v3) are filtered server-side to
+  `countyCode = '12071'` and `eventDesignationNumber = 'FL0222'` (Ian). This
+  gives 28,616 claims, and 28,541 (99.7%) carry a usable block-group code
+  (`censusGeoid`). FEMA's codes mix 2010 and 2020 census vintages. Each
+  2010-only code (214 of them) is mapped to the 2020 block group it
+  overlaps most by area.
+  - The first run of this script returned zero claims because it passed
+    the 3-digit county code (`071`) instead of the 5-digit FIPS code the
+    API filters on. The script now raises an error on an empty result
+    rather than continuing.
+- **Policies.** OpenFEMA FIMA NFIP Redacted Policies (v2), selecting
+  policies in force on 28 Sept 2022, i.e. effective on or before landfall
+  and terminating after it. `policyCount` is summed per unit: 134,046
+  policies in total, 99.96% with a usable block-group code.
+- **Metrics.**
+  - *Claim rate* = Ian claims ÷ policies in force.
+  - *Damage ratio* = `buildingDamageAmount` ÷ `buildingPropertyValue`,
+    capped at 1. Claims with missing or zero value are excluded, leaving
+    21,307. Mean dollar payout (building plus contents) is kept as a
+    secondary measure.
+  - *Take-up* = policies ÷ building footprints. This is only a proxy: it
+    exceeds 1 in 70 block groups, where individual condominium-unit
+    policies outnumber footprints, so it is used only to form terciles.
+  - *SFHA*: rated flood zones beginning with A or V. Claim rates are
+    computed separately inside and outside it.
+- **Inclusion.** A unit enters the H1 analysis with at least 20 policies
+  and 50 buildings, and the H2 analysis additionally needs at least 5
+  claims with a damage ratio. The tract and grid units are built by
+  truncating the block-group code (tract) or rounding claim and building
+  coordinates to 0.1° (grid).
+- **Inference.**
+  - Both Pearson *r* and Spearman ρ are reported.
+  - 95% CIs come from a spatial block bootstrap with 2,000 replicates. It
+    resamples whole 0.1° blocks, or 0.2° blocks for the grid unit, so that
+    neighbouring units are not treated as independent.
+  - Moran's *I* of the residuals from a linear fit uses 8-nearest-neighbour
+    row-standardized weights and 999 permutations.
+  - Naive *p*-values are saved in `results.json` but not interpreted.
+- **Outputs.** `paper/data/units/{block_group,tract,grid}.csv` and
+  `results.json`.
+
 ## 6. Results
+
+*This section and §6.1 report the original grid analysis, kept for
+comparison with §6.2. Its per-cell building sample was the first 500 rows
+DuckDB returned for each cell, not a random sample. That is the same bias
+as §5.3, at a smaller scale. The script now samples randomly with a fixed
+seed (`overture.limit_clause`), but these numbers have not been
+regenerated. §6.2 scores every building and does not depend on sampling.*
 
 The per-cell run scored **18,050 buildings** across **37 grid cells**
 covering essentially all of Lee County, and matched them against **48,105**
@@ -508,109 +562,182 @@ encodes — inflating H1's unrestricted correlation without reflecting
 anything about Ian, or about `exposure_score`'s real skill, specifically.
 Full per-cell data: [`paper/data/lee_county_grid_ian_window.csv`](data/lee_county_grid_ian_window.csv).
 
+**6.2 Unit-level results (main results, §5.5).**
+
+| | Block group | Tract | 0.1° grid |
+|---|---|---|---|
+| Units used / total | 457 / 578 | 200 / 222 | 34 / 39 |
+| **H1** claim rate, *r* [95% CI] | **0.64** [0.52, 0.77] | **0.69** [0.54, 0.82] | **0.71** [0.51, 0.90] |
+| H1 claim rate, ρ [95% CI] | 0.78 [0.73, 0.83] | 0.80 [0.73, 0.85] | 0.83 [0.64, 0.91] |
+| Raw claim count, *r* (for comparison) | 0.66 | 0.64 | 0.24 [−0.06, 0.75] |
+| **H2** damage ratio, *r* [95% CI] (units) | **0.43** [0.23, 0.55] (209) | **0.46** [0.21, 0.62] (105) | 0.12 [−0.33, 0.56] (26) |
+| H2 damage ratio, ρ | 0.43 | 0.45 | 0.16 |
+| Mean payout USD, *r* (secondary) | 0.50 | 0.54 | 0.37 [−0.33, 0.77] |
+| Claim rate inside SFHA, ρ [95% CI] | 0.73 [0.63, 0.82] | 0.77 [0.66, 0.84] | 0.74 [0.52, 0.86] |
+| Claim rate outside SFHA, ρ [95% CI] | 0.32 [0.17, 0.46] | 0.46 [0.30, 0.61] | 0.72 [0.46, 0.94] |
+| Residual Moran's *I*, claim rate (*p*) | 0.39 (0.001) | 0.28 (0.001) | 0.12 (0.03) |
+
+**H1 is supported at every scale.** Once claims are divided by policies in
+force, mean MOM depth tracks Ian's claim rate strongly at all three units,
+with confidence intervals well clear of zero. The weak grid-level frequency
+result of §6 (*r* = 0.37, or 0.25 in Ian's window) came from counting
+claims rather than rating them. Raw counts on the grid still correlate only
+at *r* = 0.24 in this run, because a 0.1° cell's claim count mostly
+reflects how many insured buildings it contains.
+
+**H2 is supported at block-group and tract scale but not on the grid.**
+Damage ratios rise with MOM depth (*r* ≈ 0.45) once units are fine enough
+to separate surge-flooded from dry neighbourhoods. A 0.1° cell averages
+both, and the relationship disappears. Dollar payouts correlate somewhat
+more strongly than damage ratios (0.50 vs 0.43 at block group), which is
+consistent with part of the payout signal reflecting property value
+rather than hazard (§8).
+
+**H3 is rejected for severity and confirmed for frequency.** This is the
+MAUP risk §3.6 warned about, now measured.
+
+**Inland losses are smaller than the grid suggested.** At block-group
+level, 18% of Ian claims (5,100 of 28,541) fall in units with mean MOM
+depth below 0.67 ft, the depth equivalent of the "score below 0.02"
+threshold in §6. Only 1.4% (411) fall in units where no building has any
+modeled surge. On the grid, the equivalent share is 36%. The pattern §6
+reported is real, but a 0.1° cell straddling the coast is labelled "low
+exposure" while containing heavily flooded blocks, which roughly doubles
+its apparent size.
+
+**Inside vs outside the SFHA.** Nearly all Ian claims (97%) and 81% of
+policies were rated inside the SFHA. Inside it, MOM depth tracks the claim
+rate closely (ρ = 0.73). Outside it, the relationship is less than half as
+strong at block-group level (ρ = 0.32). There, policies are voluntary and
+few, and losses are less tied to coastal surge.
+
+**Take-up.** By block-group tercile of take-up, the claim-rate correlation
+is *r* = 0.81 (low), 0.78 (middle) and 0.51 (high), with Spearman ρ of
+0.58, 0.80 and 0.64. High-take-up units are also the most surge-exposed
+(mean depth 1.8 ft vs 0.2 ft in the low tercile), so take-up and hazard
+cannot be separated here. The stratification shows that the relationship
+holds in every tercile, not that it is free of selection (§8).
+
+**Residual structure.** Residuals remain clearly clustered at fine scale
+(Moran's *I* 0.28–0.44, permutation *p* = 0.001). Some spatially organized
+factor that MOM depth does not capture, such as elevation, building age,
+rainfall or the gap between MOM and Ian's actual surge, explains part of
+the variance. The bootstrap CIs account for clustering in the
+*uncertainty*. They do not remove it from the *estimate*.
+
 ## 7. Discussion
 
-Both hypotheses hold directionally (§6), but the moderate correlations
-understate the more useful finding: **`exposure_score` is not miscalibrated
-so much as, for this validation, it was only ever able to measure one of
-its two inputs.** The active-flood term was inert throughout (§6) because
-it is a real-time feed with no way to look back at a 2022 storm from 2026
-(§2.2) — so what this study actually validated is SLOSH surge depth against
-real losses, not the blended score the tool ships. Hurricane Ian produced
-catastrophic rainfall well beyond its surge zone, and Lee County's inland
-cells — scored near zero by a surge-only signal, correctly, since surge
-does not reach that far inland — nonetheless produced as many claims as the
-coast. A correlation computed across *all* 37 cells necessarily blends a
-real, positive within-hazard-scope relationship (surge score does track
-surge-zone claims reasonably, per the top-scoring cells) with a population
-of inland cells surge depth was never going to explain, which drags the
-overall *r* toward the moderate values in §6 rather than the strong ones a
-surge-scoped comparison alone might show.
+**MOM is a usable proxy for where insured buildings will flood, and a
+weaker one for how badly.** MOM is a worst-case composite, not a
+reconstruction of Ian (Limitation 8). Even so, its depth at building
+centroids tracks Ian's claim rate with ρ ≈ 0.8 at every scale tested. Its
+relationship to the damage ratio is real but moderate (*r* ≈ 0.45) and
+appears only at fine scale. This matches Wing et al.'s finding that depth
+alone predicts loss magnitude poorly (§3.4). The rating of a building's
+damage depends on elevation, construction and actual water depth, and none
+of these is in a worst-case envelope.
 
-This reframes what the 60/40 surge/flood weighting question (§2.3, §1.2)
-even is. The original question — "should surge count for more or less than
-flood-extent within the score" — presupposes both terms were actually
-contributing during this validation; §6 shows the flood-extent term simply
-wasn't. The gap this study surfaces isn't a *reweighting* of surge vs.
-active-flood-extent, it's that the active-flood term needs a
-**historical/event-specific data source** (§9) before a validation like
-this one can say anything about it at all — and separately, that neither
-input, even fixed, obviously covers rainfall-driven riverine flooding the
-way the inland-claims pattern suggests it should. Wing et al.'s finding
-that depth alone predicts loss magnitude poorly (§3.4) is consistent with,
-though not identical to, this: here the deeper problem precedes depth
-entirely — for roughly a third of the county's claims, the model's depth input is simply
-inapplicable, not merely imprecise.
+**Scale and normalization did more than refine the original analysis;
+they reversed it.** On a 37-cell grid with raw counts and dollar payouts,
+severity looked like the robust result and frequency like noise (§6,
+§6.1). With census units, rates and ratios, frequency is robust and
+severity is the fragile, scale-dependent one. Neither the earlier numbers
+nor the new ones are "wrong". But a reader who saw only the grid analysis
+would have drawn the opposite conclusion. This is the practical case for
+reporting several units, and for normalizing claims by exposure before
+correlating, in any claims-based validation.
 
-Practically, for SurgeExposure specifically, this argues against reweighting
-`SURGE_WEIGHT`/`FLOOD_WEIGHT` as the next step (§1.2's original framing) and
-for scope-labeling instead: the tool should describe itself as a
-*storm-surge* exposure score, not a general flood exposure score, until a
-riverine/pluvial hazard layer is added (§9). That is a smaller, more honest
-change than recalibrating weights that were never trying to model the
-hazard that actually explains a third of the county's real losses.
+**The scope problem is smaller but real.** The original analysis found
+that about 30% of claims sat in near-zero-score cells and argued the
+lesson was scope: a surge-only signal cannot see rainfall-driven flooding.
+At block-group level that share is 18%, and the claim-rate relationship
+outside the SFHA is weak (ρ = 0.32). So the conclusion stands in reduced
+form. A surge envelope says little about losses outside mapped surge
+zones, and a tool built on it should describe itself as a storm-surge
+exposure score (§9), not a general flood score.
 
-**§6.1's date-window check adds a second, independent caveat on top of the
-scope problem above: H1's r=0.37 headline number was itself partly an
-artifact of comparing against 44 years of undifferentiated claims, not
-just Ian's.** That the severity correlation (H2) barely moved under the
-same restriction (0.52 → 0.516) while the frequency correlation dropped by
-a third is itself informative, not just a robustness footnote: it suggests
-`exposure_score` may be doing real work distinguishing which cells see
-*catastrophic* losses, while its apparent ability to predict *how many*
-claims a cell sees was inflated by claims that have nothing to do with
-storm surge at all. A reader taking one number from this report as
-`exposure_score`'s "real" skill should treat H2's r≈0.52 as the more
-trustworthy of the two, and H1's r=0.25–0.37 as bracketing a genuinely
-uncertain, window-dependent estimate rather than picking whichever end of
-that range is more flattering.
+**What this means for SurgeExposure.** The pipeline's shipped
+`exposure_score` adds a live flood-extent term that was inert here (§6).
+This paper therefore validates its surge component only. The case for
+scope-labelling the score, rather than reweighting the 60/40 formula,
+stands as argued in the original draft.
 
 ## 8. Limitations
 
-However §6 turns out, the following hold regardless and bound how much
-weight these results can carry:
+The following bound how much weight these results can carry:
 
 1. **Ecological correlation, not individual-level.** Per §3.6 (MAUP), a
-   cell-level relationship does not establish that any individual exposed
-   building was more or less likely to claim or to claim big. Reversal at a
-   different aggregation size is possible in principle and untested here.
-2. **Small *n*.** The number of overlapping grid cells is on the order of
-   tens, not hundreds — nowhere near enough for a credible significance
-   test, let alone for reweighting a production scoring model. Every
-   correlation reported is a hint, not a finding.
-3. **Spatial autocorrelation.** Neighboring 0.1° cells are not independent
-   observations (adjacent coastal cells share storm track, elevation, and
-   construction era) — the effective sample size for inference is smaller
-   than the raw cell count, which a naive Pearson *r* does not account for.
-4. **Single county, single event.** Lee County under Hurricane Ian is one
+   unit-level relationship does not establish that any individual exposed
+   building was more or less likely to claim, or to claim big. §6.2 shows
+   that changing the unit does change the severity result, so the finest
+   unit (block group) is not guaranteed to be the "true" one either.
+2. **Sample size.** The block-group and tract analyses have hundreds of
+   units, but the 0.1° grid (§6, and the grid column of §6.2) still has
+   only 34–37 cells. Its confidence intervals are correspondingly wide.
+3. **Spatial autocorrelation.** Neighbouring units are not independent. The
+   block bootstrap (§5.5) widens the CIs to reflect this, but the residuals
+   remain clustered (Moran's *I* up to 0.44). A spatial regression or an
+   effective-sample-size-corrected test (Clifford–Dutilleul) is the next
+   step, and some omitted spatial factor is clearly present.
+4. **Selection bias in who is insured.** NFIP claims exist only for insured
+   buildings, and insurance is not randomly assigned. Inside the SFHA,
+   federally backed mortgages require flood insurance, so policyholders
+   there are close to a census of mortgaged buildings. Outside it, buying
+   is voluntary, take-up is low (median 31% of footprints at block-group
+   level, falling much lower inland), and buyers are plausibly those who
+   expect to flood. Dividing by policies in force corrects for *how many*
+   buildings are insured, not *which* ones. The SFHA split and take-up
+   terciles in §6.2 show that the relationship holds in every stratum, but
+   they cannot remove the bias, because take-up is itself correlated with
+   surge exposure. The results describe insured losses. A comparison with
+   all damage, e.g. FEMA Individual Assistance inspections or post-event
+   damage surveys, would be needed for claims about all buildings. This
+   is the problem cited in the retraction of Dusseau et al. (§3.5).
+5. **Single county, single event.** Lee County under Hurricane Ian is one
    storm, one coastline, one building stock. Nothing here generalizes to a
    different storm, coastline type, or state without independent
    replication.
-5. **Claims data quality, now quantified rather than only disclosed.** Per
-   Shin et al. (2022, §3.3), NFIP hazard-attribution fields for Florida are
-   known to be incomplete/incorrect in places; this study did not perform
-   their full correction procedure. What §6.1 adds: restricting claims to
-   Ian's own date window drops 40% of raw claims and weakens H1's
-   correlation from r=0.37 to r=0.25, while H2 barely moves (0.52 → 0.516)
-   — so the unrelated-event contamination this limitation describes turns
-   out to matter substantially for claim frequency and hardly at all for
-   claim severity, not equally for both as the original draft of this
-   limitation implied.
-6. **No control for building value, age, or elevation.** Wing et al. (2020,
+6. **Claims data quality.** Per Shin et al. (2022, §3.3), NFIP
+   hazard-attribution fields for Florida are incomplete or incorrect in
+   places, and this study did not perform their full correction procedure.
+   The original grid analysis used all years of claims. Restricting to
+   Ian's date window dropped 40% of them and moved its frequency
+   correlation from r = 0.37 to 0.25 (§6.1). The main analysis (§5.5)
+   instead filters on FEMA's event designation for Ian, which avoids
+   that contamination but inherits any errors in how FEMA attributed
+   claims to the event.
+7. **No control for building value, age, or elevation.** Wing et al. (2020,
    §3.4) found these materially affect loss given depth. `exposure_score`
    doesn't model them, and neither does this validation.
-7. **SLOSH MOM is a worst-case envelope, not an Ian-specific reconstruction**
+8. **SLOSH MOM is a worst-case envelope, not an Ian-specific reconstruction**
    (§2.2). The surge input to `exposure_score` was never intended to
    reproduce this specific storm's actual water levels — a genuinely
    Ian-specific validation would need an event-specific SLOSH/P-Surge run,
    which is future work (§9), not what this study used.
-8. **This system is far less sophisticated than the commercial systems in
+9. **Take-up and damage-ratio fields are imperfect.** Building footprints
+   are not dwelling units, so the take-up proxy is distorted where condo
+   policies are common. `buildingPropertyValue` is missing or zero for
+   about a quarter of Ian claims, which are dropped from H2. Water-depth
+   fields in the claims data were not used, because FEMA's data dictionary
+   leaves their unit ambiguous.
+10. **This system is far less sophisticated than the commercial systems in
    §3.1**, which incorporate elevation, construction type, and
    decades of multi-hazard modeling. This report does not claim
    SurgeExposure's heuristic competes with those systems — only that,
    unlike them, its validation attempt is fully public.
 
 ## 9. Future Work
+
+- ~~Census-unit analysis with policy normalization and damage ratios~~ —
+  done (§5.5, §6.2).
+- **Compare MOM with observed Ian surge.** Match USGS high-water marks for
+  Ian (STN Flood Event Viewer) to units, to separate "MOM differs from
+  Ian" from "depth predicts losses poorly".
+- **Spatial models.** Fit a spatial error or lag model, or GWR, to the
+  block-group data, given the residual Moran's *I* in §6.2.
+- **Use the claims' water-depth fields** once their units are confirmed
+  with FEMA.
+- **Rerun the eight-region replication (§9.1)** with the §5.5 method.
 
 - **Give the active-flood term a historical/event-specific data source**
   (e.g. NOAA NWM's retrospective streamflow archive) instead of only the
@@ -634,7 +761,7 @@ weight these results can carry:
   H1's correlation keeps drifting as the window tightens further or has
   already stabilized.
 - Use an event-specific SLOSH/P-Surge advisory run for Ian instead of the
-  MOM worst-case composite (Limitation 7), for a genuinely storm-specific
+  MOM worst-case composite (Limitation 8), for a genuinely storm-specific
   comparison.
 - Incorporate `ratedFloodZone` and elevation as additional predictors
   alongside surge depth, informed by Wing et al.'s finding that depth alone
@@ -644,6 +771,11 @@ weight these results can carry:
   actual per-building join instead of a grid-cell ecological correlation.
 
 ### 9.1 Update (September 2026): multi-region replication
+
+*This replication used the original grid method (raw counts, dollar
+payouts, 0.1° cells). Given how much §6.2 changes the Lee County results,
+its H1 and H2 numbers should be re-derived with the §5.5 method before
+being cited (§9).*
 
 A companion project, [surge-exposure-ml](https://github.com/DBishal13/surge-exposure-ml),
 independently fetched real NFIP claims for all 8 regions this pipeline's
@@ -668,15 +800,15 @@ H1's headline number was partly a date-window artifact: at wider
 geographic scope, the same fragility shows up as sign instability rather
 than a smaller magnitude.
 
-**A concrete instance of this paper's own abstract limitation**: one
+**A concrete instance of the scope limitation**: one
 cell — French Quarter, New Orleans — scores `exposure_score = 0.000`
 (the model's flat claim of *zero* storm-surge exposure) while carrying
 7,931 real NFIP claims, the single highest claim count of any cell in the
 8-region dataset, averaging $64,576 in building-only payouts per claim.
-This is exactly the "~30% of claims from inland, rainfall-driven flooding
-a surge-only signal was never going to see" problem named in this paper's
-abstract (§1.1) — no longer an abstract caveat, but a specific, named,
-quantified place.
+This is the "~30% of claims from inland, rainfall-driven flooding
+a surge-only signal was never going to see" problem named in the original draft's
+abstract (revised to 18% at block-group level in §6.2), here as a
+specific, named, quantified place.
 
 A follow-up check in that project asked whether a trained model (rather
 than this heuristic) would catch that blind spot in advance, using honest
@@ -700,35 +832,23 @@ were originally sampled.
 
 ## 10. Conclusion
 
-SurgeExposure's `exposure_score` correlates with real Hurricane Ian NFIP
-claims at a moderate level — *r* = 0.52 for severity, robust to a
-date-window sensitivity check (§6.1); *r* = 0.37 for frequency,
-unrestricted, dropping to *r* = 0.25 once claims are restricted to Ian's
-own window (§6.1) — enough to say the heuristic is not meaningless, not
-enough to call it validated, and enough to say plainly that its two
-headline correlations do not deserve equal trust. The more useful finding
-was not the correlation strength but its shape, in two separate ways: the
-storm-surge signal this study actually measured (the active-flood term was
-inert throughout, §6) tracks claims reasonably within the surge zone it
-models and says almost nothing about the roughly third of Lee County's
-claims that came from inland, rainfall-driven flooding outside that zone;
-and separately, a large share of what looked like frequency signal in the
-unrestricted number was multi-year claims noise rather than anything
-`exposure_score` actually predicts (§6.1). The honest fix implied by this
-report is not tuning the existing 60/40 weighting (§2.3) but three more
-specific things: giving the active-flood term a historical data source so
-it can contribute at all in a study like this one, confirming or extending
-its hazard coverage to rainfall-driven flooding once it does (§9), and
-reporting the frequency correlation as a window-dependent range (0.25–0.37)
-rather than a single flattering number going forward. This report's
-central methodological point survives the specific numbers either way: a
-small, fully public validation — published data, published code, published
-bugs (§5.3, §5.4) and all — is more useful than a larger,
-asserted-but-unverifiable one, precisely because a reader can find the same
-third-of-claims pattern and the same date-window sensitivity in
-[`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv) and
-[`paper/data/lee_county_grid_ian_window.csv`](data/lee_county_grid_ian_window.csv)
-that this report found, and does not have to take the report's word for it.
+NOAA's SLOSH MOM worst-case envelope, sampled at every building in Lee
+County, tracks where Hurricane Ian's insured losses occurred: the claim
+rate correlates with mean MOM depth at ρ ≈ 0.8 at block-group, tract and
+grid scale. It tracks how severe those losses were only moderately
+(*r* ≈ 0.45), and only at fine scale. The relationship is strong inside
+the SFHA and weak outside it, and spatial structure remains in the
+residuals. These numbers come from a public pipeline and public data, with
+the selection limits of insured-loss data stated plainly (§8).
+
+The main methodological lesson is that the earlier, coarser version of
+this study reached the opposite conclusion about which of frequency and
+severity was robust. Normalizing claims by policies in force and moving
+from 0.1° cells to census units reversed it. Anyone validating a hazard
+layer against claims should report more than one areal unit and should
+not correlate raw counts. The per-unit tables in
+[`paper/data/units/`](data/units/) let a reader check both versions of the
+analysis.
 
 ## References
 
