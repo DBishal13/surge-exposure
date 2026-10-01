@@ -349,7 +349,7 @@ storm surge in September 2022.
 **Claims.** Fetched live from FEMA's OpenFEMA NFIP claims API (v3,
 `fema.gov/api/open/v3/NfipClaims`), filtered to `state='FL'` and
 `countyCode='12071'`, all available years (`data/nfip.py`). A small number
-of claims (12 of 48,117, ~0.02%) carry coordinates well outside any
+of claims (12 of 48,119, ~0.02%) carry coordinates well outside any
 plausible Lee County location (e.g. latitude 29.4°, off the Florida
 panhandle) and are dropped as mis-coded records before analysis —
 consistent with the data-quality issues Shin et al. (2022) document for
@@ -478,79 +478,85 @@ and dollars of §5.1 with rates and ratios. The steps are as follows.
 comparison with §6.2. Its per-cell building sample was the first 500 rows
 DuckDB returned for each cell, not a random sample. That is the same bias
 as §5.3, at a smaller scale. The script now samples randomly with a fixed
-seed (`overture.limit_clause`), but these numbers have not been
-regenerated. §6.2 scores every building and does not depend on sampling.*
+seed (`overture.limit_clause`). All numbers below were regenerated with
+that random sample on 2026-10-01, with the live flood feed switched off
+(§6, last paragraph). Correlations moved by 0.03–0.04 and no conclusion of
+this section changed. §6.2 scores every building and does not depend on
+sampling.*
 
-The per-cell run scored **18,050 buildings** across **37 grid cells**
-covering essentially all of Lee County, and matched them against **48,105**
+The per-cell run scored **18,042 buildings** across **37 grid cells**
+covering essentially all of Lee County, and matched them against **48,107**
 NFIP claims (after outlier filtering, §5) in those same 37 cells — full
 county-wide overlap, unlike the 5-cell overlap the flawed first pass
 produced (§5.3). Full per-cell data: [`paper/data/lee_county_grid.csv`](data/lee_county_grid.csv).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="figures/validation-chart-dark.png">
-  <img src="figures/validation-chart-light.png" alt="Two scatter plots across 37 Lee County grid cells: mean exposure score vs. NFIP claim count (r=0.37) and vs. mean claim payout (r=0.52)">
+  <img src="figures/validation-chart-light.png" alt="Two scatter plots across 37 Lee County grid cells: mean exposure score vs. NFIP claim count (r=0.35) and vs. mean claim payout (r=0.49)">
 </picture>
 
 **H1 (claim frequency):** mean `exposure_score` correlated with claim count
-at **r = 0.37** — a real but modest positive relationship, weaker than the
-r = 0.20 the flawed 5-cell pass found, and far weaker than that pass's
-severity correlation of r = 0.81 (§5.3) suggested the eventual pattern
-would be.
+at **r = 0.35** — a real but modest positive relationship, somewhat stronger than
+the r = 0.20 the flawed 5-cell pass found. That pass's severity
+correlation of r = 0.81 (§5.3) turned out to be far too optimistic.
 
 **H2 (claim severity):** mean `exposure_score` correlated with mean claim
-payout at **r = 0.52** — moderate, and, as with H1, higher than the
+payout at **r = 0.49** — moderate, and, as with H1, higher than the
 frequency correlation but by a much smaller margin than the first pass
 implied. Both hypotheses are supported directionally; neither is a strong
 relationship.
 
 **The more informative pattern was spatial, not statistical.** Splitting
 the county's cells at roughly the coastline (lon ≤ -82.0° vs. lon > -82.0°):
-coastal cells average a mean exposure score of **0.081**, inland cells
-**0.039** — the score correctly recognizes the coast as more exposed, by a
+coastal cells average a mean exposure score of **0.068**, inland cells
+**0.027** — the score correctly recognizes the coast as more exposed, by a
 factor of ~2. But claim volume does not track that split: coastal cells
-account for 22,350 claims, inland cells **25,755** — Lee County's *interior*
+account for 22,350 claims, inland cells **25,757** — Lee County's *interior*
 generated more claims than its scored-as-riskier coastline. Roughly **30%
-of all claims (14,605 of 48,105) sit in cells with a mean exposure score
+of all claims (15,492 of 48,107, 32%) sit in cells with a mean exposure score
 below 0.02** — near the pipeline's effective floor — concentrated in the
 county's eastern cells (grid longitude -81.6 to -81.9, inland Fort Myers
 and Lehigh Acres). The highest-scoring cell in the dataset (26.4°N,
--81.9°W, score 0.196) sits at the coastal/inland boundary and does carry
+-81.9°W, score 0.191) sits at the coastal/inland boundary and does carry
 substantial claims (4,763) — but several purely inland cells (e.g. 26.6°N,
--82.0°W: score 0.0065, 4,619 claims; 26.6°N, -81.9°W: score 0.0002, 3,375
+-82.0°W: score 0.008, 4,619 claims; 26.6°N, -81.9°W: score 0.007, 3,375
 claims) carry comparable claim volume with a score indistinguishable from
 zero.
 
 **One more fact changes how to read all of the above: the active-flood term
-contributed nothing in this run.** Querying `data/flood_inundation.py`'s
-live NWM feed for the full county extent, in mid-2026, returns zero active
-inundation polygons — expected, since Lee County is not presently flooding
+contributed nothing in this run.** In the original run, querying
+`data/flood_inundation.py`'s live NWM feed for the full county extent, in
+mid-2026, returned zero active inundation polygons — expected, since Lee County is not presently flooding
 and the feed has no historical replay capability (§2.2). That means
-`flood_active` was `False` for every one of the 18,050 buildings scored
+`flood_active` was `False` for every building scored
 here, and every `exposure_score` in this study reduces exactly to its
 surge term: `0.6 * min(surge_ft, 20) / 20`. §6's correlations are therefore
 correlations against **SLOSH surge depth alone**, not against the full
 60/40 formula — the 40% flood-extent weight was structurally inert for
-this entire validation, through no fault of the buildings scored.
+this entire validation, through no fault of the buildings scored. The
+regenerated run therefore switches the live feed off explicitly
+(`run_exposure_pipeline(..., live_flood=False)`). This gives the same
+scores without depending on a service that was returning server errors,
+or letting present-day flooding leak into a 2022 validation.
 
 **6.1 Sensitivity check: restricting claims to Ian's own date window (§5.4).**
-Filtering `dateOfLoss` to 2022-08-31–2022-12-31 dropped **19,290 of 48,117
+Filtering `dateOfLoss` to 2022-08-31–2022-12-31 dropped **19,292 of 48,119
 claims (40%)** — a far larger share than the disclosed-but-unquantified
 Limitation 5 in the original draft implied. Three grid cells lost all
 their claims entirely and dropped out (37 → 34 overlapping cells); the
-remaining **16,550 scored buildings** matched against **28,827** real,
+remaining **16,543 scored buildings** matched against **28,816** real,
 Ian-window-only claims. The two hypotheses did *not* respond the same way:
 
 | | Unrestricted (all years, §6) | Ian window only (§6.1) | Change |
 |---|---|---|---|
-| Claims used | 48,105 | 28,827 | -40% |
+| Claims used | 48,107 | 28,816 | -40% |
 | Grid cells | 37 | 34 | -3 |
-| H1: r(score, claim count) | 0.37 | **0.25** | -0.12 |
-| H2: r(score, mean payout) | 0.52 | **0.516** | -0.004, essentially unchanged |
+| H1: r(score, claim count) | 0.35 | **0.21** | -0.14 |
+| H2: r(score, mean payout) | 0.49 | **0.49** | 0.000, unchanged |
 
 **H1's correlation is not robust to this check; H2's is.** Restricting to
 claims plausibly caused by Ian weakens the frequency relationship by about
-a third (0.37 → 0.25) while leaving the severity relationship untouched.
+about 40% (0.35 → 0.21) while leaving the severity relationship untouched.
 The natural read: **large-dollar claims cluster tightly with real,
 identifiable storm events almost regardless of which storm** (a
 catastrophic payout in Lee County is unlikely to come from routine,
@@ -585,7 +591,7 @@ Full per-cell data: [`paper/data/lee_county_grid_ian_window.csv`](data/lee_count
 **H1 is supported at every scale.** Once claims are divided by policies in
 force, mean MOM depth tracks Ian's claim rate strongly at all three units,
 with confidence intervals well clear of zero. The weak grid-level frequency
-result of §6 (*r* = 0.37, or 0.25 in Ian's window) came from counting
+result of §6 (*r* = 0.35, or 0.21 in Ian's window) came from counting
 claims rather than rating them. Raw counts on the grid still correlate only
 at *r* = 0.24 in this run, because a 0.1° cell's claim count mostly
 reflects how many insured buildings it contains.
@@ -707,7 +713,7 @@ The following bound how much weight these results can carry:
    places, and this study did not perform their full correction procedure.
    The original grid analysis used all years of claims. Restricting to
    Ian's date window dropped 40% of them and moved its frequency
-   correlation from r = 0.37 to 0.25 (§6.1). The main analysis (§5.5)
+   correlation from r = 0.35 to 0.21 (§6.1). The main analysis (§5.5)
    instead filters on FEMA's event designation for Ian, which avoids
    that contamination but inherits any errors in how FEMA attributed
    claims to the event.
@@ -759,8 +765,8 @@ The following bound how much weight these results can carry:
   `SURGE_WEIGHT`/`FLOOD_WEIGHT` in `pipeline.py` has been done on the
   strength of this result.
 - ~~Restrict claims to a tight post-Ian date window~~ — done (§5.4, §6.1):
-  H1 is window-sensitive (r=0.37 unrestricted vs. 0.25 restricted), H2
-  is not (0.52 vs. 0.516). What's still open: sweep the window's *width*
+  H1 is window-sensitive (r=0.35 unrestricted vs. 0.21 restricted), H2
+  is not (0.49 vs. 0.49). What's still open: sweep the window's *width*
   (this study picked one four-week-before/three-month-after window
   without testing sensitivity to that specific choice) to check whether
   H1's correlation keeps drifting as the window tightens further or has
@@ -784,7 +790,7 @@ being cited (§9).*
 
 A companion project, [surge-exposure-ml](https://github.com/DBishal13/surge-exposure-ml),
 independently fetched real NFIP claims for all 8 regions this pipeline's
-public demo dataset covers (140,732 claims total, vs. this study's 48,105
+public demo dataset covers (140,732 claims total, vs. this study's 48,107
 for Lee County alone) and re-ran this paper's exact grid-cell methodology
 (§5) against them — the same 0.1° snap-to-grid, the same per-cell
 aggregation, the same Pearson correlation — without re-scoring a single
@@ -793,7 +799,7 @@ values for the 7,717 buildings in its demo dataset exactly as this project
 produced them.
 
 **H2 (severity) held up, and strengthened, outside Lee County**: r = 0.52
-(Lee County) → r = 0.711 across all 13 cells in the wider dataset, rising
+(Lee County, original first-N sample; 0.49 after the §6 rerun) → r = 0.711 across all 13 cells in the wider dataset, rising
 to r = 0.805 with one outlier cell excluded. A heuristic that only worked
 by Lee-County-specific coincidence would be expected to weaken outside it,
 not strengthen — this is evidence against that reading.
