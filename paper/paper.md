@@ -47,8 +47,11 @@ best (mean bias +0.3 ft, RMSE 2.1 ft), and it also matches the losses
 best. The Category 4 envelope overpredicts observed water by 13 ft, and
 its correlation with the damage ratio falls to 0.27. A category's MOM is
 a worst case over hundreds of hypothetical storms, so matching it to the
-real storm's category overstates surge. All data, code and per-unit
-tables are public.
+real storm's category overstates surge. Replacing MOM with an observed
+depth surface interpolated from the marks barely changes the loss
+correlations (damage ratio *r* 0.43 vs 0.39 on the same units), so the
+limit on predicting severity is depth itself, not the surge map. All data,
+code and per-unit tables are public.
 
 ## 1. Introduction
 
@@ -712,10 +715,77 @@ stand-in for what Ian actually did.
   made from the data. The §6.2 analysis was fixed (as Category 1) before
   this comparison, and all five categories are reported here.
 
+**6.4 Observed depth: is the limit the envelope, or depth itself?** §6.2
+leaves two explanations for the moderate severity result. Either MOM
+differs from what Ian actually did, or water depth is only a moderate
+predictor of damage, whatever its source. `scripts/validate_observed_depth.py`
+separates them by building an *observed* depth at each building and rerunning
+§6.2 with it. The steps are:
+
+- **Ground elevation:** the USGS 3DEP 1/3-arc-second (~10 m) DEM, in
+  NAVD88, sampled at each building centroid.
+- **Water surface:** an inverse-distance-weighted (IDW) interpolation of
+  the high-water marks' surveyed water-surface elevations (NAVD88). It uses
+  the 8 nearest marks within 2 km, with 5 km as a sensitivity check.
+- **Observed depth:** water surface minus ground, floored at 0. Buildings
+  farther than 2 km from every mark get no observed depth.
+- **Units:** only units where at least 80% of buildings have an observed
+  depth are used. The same units are scored with Category 1 MOM for a
+  like-for-like comparison.
+
+**Checking the observed surface.**
+- *At the marks:* predicting each mark's depth from the other marks
+  (leave-one-out) gives bias +0.6 ft, RMSE 1.5 ft and *r* = 0.85. Category 1
+  MOM at the same 237 marks gives +0.3 ft, 2.1 ft and *r* = 0.61. The
+  interpolated surface is the better description of Ian's water where it
+  can be checked.
+- *Ground:* the DEM sits on average 0.6 ft below the surveyed ground at
+  the marks (RMSE 1.5 ft), which explains most of the interpolated
+  surface's +0.6 ft depth bias. A constant offset like this does not
+  affect correlations.
+
+| Same units, max distance 2 km | Block groups | Tracts |
+|---|---|---|
+| Units (claim rate / damage ratio) | 111 / 89 | 44 / 40 |
+| Claim rate: observed depth, *r* [95% CI] | 0.56 [0.35, 0.75] | 0.56 [0.29, 0.80] |
+| Claim rate: Category 1 MOM, *r* [95% CI] | 0.53 [0.30, 0.73] | 0.54 [0.25, 0.84] |
+| Damage ratio: observed depth, *r* [95% CI] | 0.43 [0.11, 0.63] | 0.49 [0.05, 0.71] |
+| Damage ratio: Category 1 MOM, *r* [95% CI] | 0.39 [0.05, 0.56] | 0.48 [−0.01, 0.67] |
+| *r* between unit-mean observed and MOM depth | 0.95 | 0.97 |
+
+*With a 5 km limit (254 block groups), the results are the same in
+substance. Claim rate: observed 0.60 vs MOM 0.58. Damage ratio: 0.41 vs
+0.37.*
+
+**Depth itself is the limit.** Observed depth predicts both outcomes only
+slightly better than Category 1 MOM, and the difference is far inside the
+confidence intervals. Once averaged over a block group, the two depths are
+almost the same variable (*r* = 0.95). MOM is wrong at individual marks by
+about 2 ft, but those errors largely average out over a block group.
+What remains is the same moderate relationship either way: even Ian's
+observed water explains only about a fifth of the variation in mean damage
+ratio between block groups (*r*² ≈ 0.18). For severity, the missing
+information is not a better surge map. It is building-level factors: first-floor
+elevation, construction, waves and debris, and how long water stayed. This
+matches Wing et al.'s finding that depth alone predicts loss magnitude
+poorly (§3.4).
+
+When both depths enter one standardized regression for the claim rate,
+observed depth takes nearly all the weight at 2 km (β 0.60 vs −0.04 for MOM).
+At 5 km the split is 0.49 vs 0.11. With the two predictors this
+collinear, those coefficients are unstable and are reported only as a
+direction.
+
+**Caveats.**
+- Coverage is coastal: 23% of the county's buildings at 2 km (51% at 5 km).
+- IDW does not know about barriers such as causeways, ridges or seawalls.
+  It may smooth water across them.
+- The marks are mostly seed lines, which can include some wave run-up.
+
 ## 7. Discussion
 
 **MOM is a usable proxy for where insured buildings will flood, and a
-weaker one for how badly.** MOM is a worst-case composite, not a
+weaker one for how badly. The weakness is not mainly MOM's (§6.4).** MOM is a worst-case composite, not a
 reconstruction of Ian (Limitation 8). Even so, its depth at building
 centroids tracks Ian's claim rate with ρ ≈ 0.8 at every scale tested. Its
 relationship to the damage ratio is real but moderate (*r* ≈ 0.45) and
@@ -830,11 +900,14 @@ The following bound how much weight these results can carry:
 
 - ~~Census-unit analysis with policy normalization and damage ratios~~ —
   done (§5.5, §6.2).
-- ~~Compare MOM with observed Ian surge~~ — done at the marks
-  themselves (§6.3). Still open: interpolate the marks' water-surface
-  elevations, minus a ground DEM (USGS 3DEP), into an *observed* depth for
-  each building. Then repeat §6.2 with observed instead of modeled depth,
-  to separate "MOM differs from Ian" from "depth predicts losses poorly".
+- ~~Compare MOM with observed Ian surge~~ — done at the marks (§6.3) and
+  as an observed depth surface (§6.4). Open: replace IDW with an
+  interpolation that respects barriers, or use an Ian hindcast (ADCIRC) as
+  the observed surface across the whole county.
+- **Building-level severity factors.** Add first-floor elevation (from
+  NFIP's `elevationDifference` field, or elevation certificates where
+  available), construction type and year built. §6.4 shows that a better
+  depth input alone will not improve severity prediction much.
 - **Other storms.** Test whether "a lower-category MOM fits better" holds
   for other events with dense high-water-mark surveys (e.g. Michael 2018,
   Helene 2024).
@@ -946,7 +1019,10 @@ the SFHA and weak outside it, and spatial structure remains in the
 residuals. Against USGS high-water marks, the Category 1 envelope
 matches Ian's observed water to within 0.3 ft on average, while the
 envelope for Ian's own category (4) is 13 ft too deep and tracks losses
-worse (§6.3). These numbers come from a public pipeline and public data,
+worse (§6.3). An observed depth surface built from the marks tracks
+losses only marginally better than Category 1 MOM (§6.4). Beyond a
+reasonable envelope, better depth data does not buy much severity skill.
+These numbers come from a public pipeline and public data,
 with the selection limits of insured-loss data stated plainly (§8).
 
 For practitioners, the second lesson is that "use the MOM for the
