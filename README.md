@@ -2,17 +2,23 @@
 
 ![SurgeExposure map showing storm-surge exposure overlay for Clearwater Beach, FL](image.png)
 
-**Research finding: a lightweight, explainable storm-surge exposure score
-correlates with real Hurricane Ian claim severity robustly (r≈0.52, stable
-under a date-window sensitivity check) but with claim frequency only
-weakly and unreliably (r=0.25–0.37, depending on that same check) — and it
-is silent about roughly a third of the county's real claims, which came
-from inland, rainfall-driven flooding a surge-only signal was never going
-to see.** That's not a calibration problem, it's a scope problem, and
-distinguishing which of the score's two correlations actually deserves
-trust is the more useful result of the two — full validation study,
-literature review, and two honestly-reported methodological bugs found
-along the way: **[paper/paper.md](paper/paper.md)**.
+**Research findings (Hurricane Ian, Lee County, FL; [manuscript](paper/manuscript/manuscript.md), [full technical report](paper/paper.md)):**
+
+- **Frequency.** NOAA's Category 1 SLOSH MOM depth, sampled at all 366,764
+  buildings, tracks Ian's claim rate (claims ÷ policies in force) strongly
+  at block-group, tract and grid scale: block-group r = 0.64 [0.52, 0.77],
+  significant after spatial correction.
+- **Severity.** It tracks the damage ratio only moderately (r ≈ 0.45), and
+  only at fine scale.
+- **Category.** Against 239 USGS high-water marks, the Category 1
+  envelope matches Ian's water best (bias +0.3 ft). The envelope for Ian's
+  own landfall category (4) is 13 ft too deep and tracks losses worse.
+- **Observed depth.** An observed depth surface from those marks predicts
+  losses only marginally better than MOM. The severity limit is depth
+  itself, not the surge map.
+- **Method.** An earlier grid-cell analysis using raw counts and payouts
+  reached the opposite conclusion about which result was robust. Scale
+  and normalization matter.
 
 ## Related work
 
@@ -26,10 +32,10 @@ the foundation for two follow-on Databricks projects:
   re-validates this project's own methodology at 8x the geographic scope
   (140k+ real FEMA claims, not just Lee County) and trains an actual model
   to check honestly whether it beats this hand-picked heuristic. The
-  severity correlation held up and *strengthened* outside Lee County
-  (r=0.52 → 0.71–0.81); the frequency one didn't, and got sign-unstable.
-  Along the way it found a named, quantified instance of this paper's own
-  abstract limitation — see [paper/paper.md §9.1](paper/paper.md#91-update-september-2026-multi-region-replication).
+  severity correlation held up outside Lee County; the frequency one
+  didn't. That replication used the earlier grid method (raw counts and
+  payouts), so its numbers are not comparable with the current results —
+  see [paper/paper.md §9.1](paper/paper.md#91-update-september-2026-multi-region-replication).
 
 Both are part of a broader
 [Databricks AI portfolio](https://github.com/DBishal13/databricks-ai-capstone)
@@ -132,64 +138,38 @@ is still ~35-40s (dominated by the live Overture GeoParquet scan) but a
 repeat request for the same area is ~60ms. See `api/cache.py`.
 
 ## Validation against real losses
-`exposure_score` is currently a fixed, explainable heuristic (60% surge
-depth + 40% active flood intersection, see `pipeline.py`) — not calibrated
-against real outcomes. This project includes a full validation study
-against real FEMA NFIP claims for Lee County, FL (Fort Myers Beach,
-Sanibel, Cape Coral — hit directly by Hurricane Ian's 2022 surge), written
-up with a literature review, methodology, and results in
-**[paper/](paper/)** — see [paper/paper.md](paper/paper.md) for the full
-report, [paper/figures/](paper/figures/) for charts, and
-[paper/data/](paper/data/) for the underlying per-cell CSV.
+The validation study tests the surge input, NOAA SLOSH MOM depth at building
+centroids, against Hurricane Ian in Lee County, FL. The paper is
+[paper/manuscript/manuscript.md](paper/manuscript/manuscript.md), and the
+full technical report with history and documented bugs is
+[paper/paper.md](paper/paper.md).
 
-FEMA rounds NFIP claim coordinates to 1 decimal degree (~11km) before
-publishing, for privacy — coarser than this project's building-level
-scores, so the comparison can't be per-building. Instead both sides are
-snapped to that same 0.1° grid and aggregated per cell before comparing.
-Run it yourself (needs the SLOSH raster cached, see Setup, and live
-network access):
+NFIP claims are public with coordinates rounded to 0.1°, but they carry
+census block-group codes, so the analysis runs at block-group, tract and
+grid scale. Install the analysis extras
+(`pip install -e ".[analysis]"`) and run the scripts below. They cache
+inputs under `data/` and write outputs under `paper/data/`.
+
 ```bash
-python scripts/validate_exposure_bins.py
+python scripts/validate_units.py           # claim rate, damage ratio, SFHA, take-up, bootstrap CIs
+python scripts/spatial_models.py           # Dutilleul modified t-test, spatial error model
+python scripts/fetch_mom_categories.py     # MOM Category 1-5 rasters (range-extracted from NOAA's zip)
+python scripts/validate_categories.py      # each category vs USGS high-water marks and claims
+python scripts/validate_observed_depth.py  # observed depth from high-water marks + 3DEP DEM
+python scripts/validate_exposure_bins.py [--ian-window]   # earlier grid-cell design, for comparison
+python scripts/plot_units_chart.py && python scripts/plot_categories_chart.py && python scripts/plot_validation_chart.py
 ```
-It prints the per-cell table plus Pearson correlation between mean
-exposure score and (a) claim count and (b) mean amount paid per cell, and
-writes the table to `paper/data/lee_county_grid.csv`. Regenerate the
-chart below from that CSV with `python scripts/plot_validation_chart.py`.
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="paper/figures/validation-chart-dark.png">
-  <img src="paper/figures/validation-chart-light.png" alt="Two scatter plots across 37 Lee County grid cells: mean exposure score vs. NFIP claim count (r=0.37) and vs. mean claim payout (r=0.52)">
+  <source media="(prefers-color-scheme: dark)" srcset="paper/figures/units-chart-dark.png">
+  <img src="paper/figures/units-chart-light.png" alt="Mean SLOSH MOM depth against Hurricane Ian claim rate and damage ratio at block-group, tract and 0.1-degree grid scale">
 </picture>
 
-**Actual result of the (corrected, county-wide) live run:** 18,050 scored
-buildings and 48,105 NFIP claims across all 37 grid cells the county spans.
-Mean exposure score correlated moderately with claim count (r = 0.37) and
-mean claim payout (r = 0.52) — real but modest. One catch worth knowing
-about: `flood_active` is a *live* NOAA feed with no historical replay, so
-querying it in 2026 for a 2022 storm returned zero active flooding
-everywhere — every score in this study was really just its 60% surge term.
-That surge signal is spatially sensible (coastal cells score ~2x higher on
-average than inland, 0.081 vs 0.039) but incomplete: inland cells actually
-had *more* claims than coastal (25,755 vs 22,350), and ~30% of all claims
-sit in cells with a near-zero score — Hurricane Ian's inland damage was
-largely rainfall-driven riverine flooding, which a live-only,
-surge-focused score isn't positioned to see.
-
-**A follow-up check found the r=0.37 number is softer than it looks.** The
-run above uses *all* years of Lee County NFIP claims (1978–2026), not just
-Ian's. Restricting to a tight post-Ian date window
-(`python scripts/validate_exposure_bins.py --ian-window`) drops 40% of raw
-claims (19,290 of 48,117) as attributable to unrelated flood events — and
-under that stricter, more defensible comparison, claim frequency's
-correlation weakens by a third (r = 0.37 → **0.25**) while claim severity's
-barely moves (r = 0.52 → **0.516**). Read this as: the score's ability to
-flag *which cells see catastrophic losses* looks real and fairly robust;
-its ability to predict *how many claims* a cell sees was partly an
-artifact of comparing against decades of unrelated claims, not something
-`exposure_score` itself earns credit for. Full writeup, including a second
-real bug caught building this check (a timezone mismatch between FEMA's
-API and the filter, now covered by a regression test):
-[paper/paper.md](paper/paper.md) §5.4, §6, §6.1, §7.
+A historical validation turns off the live NOAA flood feed
+(`run_exposure_pipeline(..., live_flood=False)`), because that feed has no
+historical replay. The MOM category is set by
+`settings.storm_surge_category` (default 1, which fits Ian best; paper
+§6.3).
 
 ## Next steps
 - Give the active-flood term a historical/event-specific data source
