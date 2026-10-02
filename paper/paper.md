@@ -309,8 +309,20 @@ are not relied on here. The stated flaw applies to any study that treats
 NFIP claims as ground truth, this one included: claims only exist where
 someone bought a policy, and take-up varies across space. §5 therefore
 normalizes claim counts by policies in force, and §8 discusses the
-selection bias that normalization cannot remove. [TODO: add any surviving
-peer-reviewed comparison of loss models against claims.] The scarcity of
+selection bias that normalization cannot remove.
+
+Most published validation of US flood hazard models is against maps or
+other models, not claims. Bates et al. (2021) validated the national
+fluvial, pluvial and coastal model behind First Street's Flood Factor
+against high-quality local models and FEMA's 1%-annual-chance maps
+(Critical Success Index 0.69–0.82). Studies that do use NFIP claims as
+the reference have mostly asked a different question: where losses fall
+relative to the mapped floodplain. Around Houston, the 100-year floodplain
+proved neither accurate nor sufficient as a risk metric, with substantial
+losses outside it (Highfield, Norman & Brody, 2013; Blessing, Sebastian &
+Brody, 2017). Other studies use claims as training labels rather than as
+an independent test, as in Mobley et al.'s (2021) random-forest flood
+probability map for southeast Texas. The scarcity of
 public, checkable validation is part of the motivation for this report:
 §4-§6 compare a model score against real claims at a much smaller scale
 (one county, one event), with every input, script and intermediate table
@@ -652,6 +664,28 @@ rainfall or the gap between MOM and Ian's actual surge, explains part of
 the variance. The bootstrap CIs account for clustering in the
 *uncertainty*. They do not remove it from the *estimate*.
 
+**Spatially corrected inference** (`scripts/spatial_models.py`).
+
+| | Block group, claim rate | Block group, damage ratio | Tract, claim rate | Tract, damage ratio |
+|---|---|---|---|---|
+| Units *n* | 457 | 209 | 200 | 105 |
+| Dutilleul effective *n* | 73 | 52 | 45 | 51 |
+| Dutilleul *p* | 7 × 10⁻¹⁰ | 0.002 | 2 × 10⁻⁷ | 0.001 |
+| Standardized slope, OLS → spatial error model | 0.64 → 0.73 | 0.43 → 0.55 | 0.69 → 0.64 | 0.46 → 0.48 |
+| Spatial error λ | 0.74 | 0.76 | 0.67 | 0.64 |
+
+- **Modified t-test** (Clifford, Richardson & Hémon 1989; Dutilleul 1993).
+  Spatial autocorrelation in both variables cuts the effective sample size
+  to 45–73 independent observations, roughly a sixth of the raw count of
+  units. Both relationships remain clearly significant at that reduced *n*.
+- **Spatial error model.** Fitted by maximum likelihood with
+  8-nearest-neighbour weights. It absorbs the residual clustering
+  (λ ≈ 0.7) and leaves the depth coefficient as large as, or larger than,
+  under OLS.
+
+The clustering is real and large, but it is not producing the
+relationship.
+
 **6.3 Which MOM category? A check against USGS high-water marks.** NOAA's
 national MOM download holds one high-tide raster per hurricane category.
 Every number above uses Category 1 (§2.2). That was not chosen on purpose,
@@ -843,10 +877,11 @@ The following bound how much weight these results can carry:
    units, but the 0.1° grid (§6, and the grid column of §6.2) still has
    only 34–37 cells. Its confidence intervals are correspondingly wide.
 3. **Spatial autocorrelation.** Neighbouring units are not independent. The
-   block bootstrap (§5.5) widens the CIs to reflect this, but the residuals
-   remain clustered (Moran's *I* up to 0.44). A spatial regression or an
-   effective-sample-size-corrected test (Clifford–Dutilleul) is the next
-   step, and some omitted spatial factor is clearly present.
+   block bootstrap (§5.5) widens the CIs to reflect this, and the residuals
+   remain clustered (Moran's *I* up to 0.44). Dutilleul's modified t-test
+   and a spatial error model (§6.2) show that the relationships survive
+   this. But some omitted spatial factor is clearly present, and it is
+   not identified here.
 4. **Selection bias in who is insured.** NFIP claims exist only for insured
    buildings, and insurance is not randomly assigned. Inside the SFHA,
    federally backed mortgages require flood insurance, so policyholders
@@ -911,8 +946,9 @@ The following bound how much weight these results can carry:
 - **Other storms.** Test whether "a lower-category MOM fits better" holds
   for other events with dense high-water-mark surveys (e.g. Michael 2018,
   Helene 2024).
-- **Spatial models.** Fit a spatial error or lag model, or GWR, to the
-  block-group data, given the residual Moran's *I* in §6.2.
+- ~~Spatial models~~ — modified t-test and spatial error model done
+  (§6.2). Open: identify the omitted spatial factor, e.g. with GWR/MGWR
+  or by adding elevation and building-age covariates.
 - **Use the claims' water-depth fields** once their units are confirmed
   with FEMA.
 - **Rerun the eight-region replication (§9.1)** with the §5.5 method.
@@ -1044,6 +1080,19 @@ analysis.
   Catastrophe Risk and Resilience*, 4(1). **Retracted 16 September 2026**;
   cited only to note the retraction (§3.5).
   https://journalofcrr.com/research/04-01-dusseau-et-al/
+- Bates, P.D., Quinn, N., Sampson, C., et al. (2021). Combined modeling
+  of US fluvial, pluvial, and coastal flood hazard under current and
+  future climates. *Water Resources Research*, 57, e2020WR028673.
+  https://doi.org/10.1029/2020WR028673
+- Blessing, R., Sebastian, A., & Brody, S.D. (2017). Flood risk
+  delineation in the United States: How much loss are we capturing?
+  *Natural Hazards Review*, 18(3), 04017002.
+  https://doi.org/10.1061/(ASCE)NH.1527-6996.0000242
+- Clifford, P., Richardson, S., & Hémon, D. (1989). Assessing the
+  significance of the correlation between two spatial processes.
+  *Biometrics*, 45(1), 123–134.
+- Dutilleul, P. (1993). Modifying the t test for assessing the
+  correlation between two spatial processes. *Biometrics*, 49(1), 305–314.
 - FEMA. National Flood Insurance Program Risk Rating 2.0: Methodology and
   Data Sources.
   https://www.fema.gov/sites/default/files/documents/FEMA_Risk-Rating-2.0_Methodology-and-Data-Appendix__01-22.pdf
@@ -1052,6 +1101,16 @@ analysis.
   https://help.firststreet.org/hc/en-us/articles/1500000359741-Flood-Model-Methodology-Calculating-property-level-risk
 - Fathom Global. Risk Scores — flood risk metrics.
   https://www.fathom.global/product/global-flood-map/risk-scores/
+- Highfield, W.E., Norman, S.A., & Brody, S.D. (2013). Examining the
+  100-year floodplain as a metric of risk, loss, and household
+  adjustment. *Risk Analysis*, 33(2), 186–191.
+  https://doi.org/10.1111/j.1539-6924.2012.01840.x
+- Mobley, W., Sebastian, A., Blessing, R., Highfield, W.E., Stearns, L.,
+  & Brody, S.D. (2021). Quantification of continuous flood hazard using
+  random forest classification and flood insurance claims at large
+  spatial scales: a pilot study in southeast Texas. *Natural Hazards and
+  Earth System Sciences*, 21, 807–822.
+  https://doi.org/10.5194/nhess-21-807-2021
 - NOAA National Hurricane Center. Storm Surge Unit — model verification and
   post-storm analysis. https://www.nhc.noaa.gov/surge/ssu.php
 - NOAA National Hurricane Center. National Storm Surge Risk Maps, Version 4.
